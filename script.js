@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultFile = document.getElementById('resultFile');
     
     // 修改：分离URL输入框和URL结果列表的引用
-    const urlInput = document.getElementById('urlList'); // 配置面板中的URL输入文本区域
+    const urlInput = document.getElementById('urlInput'); // 配置面板中的URL输入文本区域
     const urlListElement = document.querySelector('#content .list-group'); // URL结果列表容器
     
     // 标签页引用
@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let crawlerResults = null;
     let selectedUrlIndex = null;
     let selectedCategoryId = null;
+    
+    // 创建模态框元素
+    createImageModal();
     
     // 生成配置文件
     generateBtn.addEventListener('click', function() {
@@ -280,6 +283,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         contentPreview.innerHTML = '';
         contentPreview.appendChild(div);
+        
+        // 内容渲染后设置图片点击事件
+        setTimeout(setupImageClickHandlers, 100);
     }
     
     // 渲染分类列表 - 修改版
@@ -453,6 +459,7 @@ function createImageModal() {
     
     // 创建图片容器
     const modalImg = document.createElement('img');
+    modalImg.id = 'modalImage';
     modalImg.className = 'image-modal-content';
     modal.appendChild(modalImg);
     
@@ -469,17 +476,28 @@ function createImageModal() {
 
 // 设置图片点击事件 - 在渲染内容预览后调用
 function setupImageClickHandlers() {
+    console.log("设置图片点击事件处理");
+    
     // 确保模态框存在
-    const {modal, modalImg} = createImageModal();
+    if (!document.getElementById('imageModal')) {
+        createImageModal();
+    }
+    
+    const modal = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImage');
     
     // 获取所有内容区域内的图片
     const images = document.querySelectorAll('.content-body img');
+    console.log(`找到 ${images.length} 张图片`);
     
     // 为每个图片添加点击事件
     images.forEach(img => {
+        img.style.cursor = 'pointer';
         img.addEventListener('click', function(event) {
             event.preventDefault();
             event.stopPropagation();
+            
+            console.log("图片被点击:", this.src);
             
             // 设置模态框图片源
             modalImg.src = this.src;
@@ -488,41 +506,4 @@ function setupImageClickHandlers() {
             modal.classList.add('show');
         });
     });
-}
-
-// 修改渲染内容预览函数，添加对图片的处理
-function renderContentPreview(item) {
-    if (!contentPreview) {
-        console.error("内容预览元素未找到!");
-        return;
-    }
-    
-    if (!item) {
-        contentPreview.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未选择内容</p></div>';
-        return;
-    }
-    
-    console.log("渲染内容:", item.title, "内容长度:", item.content ? item.content.length : 0);
-    
-    const div = document.createElement('div');
-    div.innerHTML = `
-        <h4 class="content-title">${item.title || '无标题'}</h4>
-        <div class="content-info">
-            <div class="url-info">URL: <a href="${item.url}" target="_blank">${item.url}</a></div>
-            <div class="status-info">状态: ${item.status || '未知'}</div>
-        </div>
-        <div class="content-body">
-            ${item.content && item.content.includes('<') ? 
-                // HTML内容
-                item.content : 
-                // 纯文本内容或空内容
-                (item.content ? `<pre>${item.content}</pre>` : '<div class="text-muted">内容为空</div>')}
-        </div>
-    `;
-    
-    contentPreview.innerHTML = '';
-    contentPreview.appendChild(div);
-    
-    // 内容渲染后设置图片点击事件
-    setTimeout(setupImageClickHandlers, 100);
 }
