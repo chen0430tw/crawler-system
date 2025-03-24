@@ -440,3 +440,89 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("分类列表元素:", categoryList ? categoryList.tagName : "未找到");
     console.log("分类内容元素:", categoryContent ? categoryContent.tagName : "未找到");
 });
+
+// 创建模态框元素
+function createImageModal() {
+    // 检查是否已存在模态框
+    if (document.getElementById('imageModal')) return;
+    
+    // 创建模态框
+    const modal = document.createElement('div');
+    modal.id = 'imageModal';
+    modal.className = 'image-modal';
+    
+    // 创建图片容器
+    const modalImg = document.createElement('img');
+    modalImg.className = 'image-modal-content';
+    modal.appendChild(modalImg);
+    
+    // 点击模态框关闭
+    modal.addEventListener('click', function() {
+        modal.classList.remove('show');
+    });
+    
+    // 添加到页面
+    document.body.appendChild(modal);
+    
+    return {modal, modalImg};
+}
+
+// 设置图片点击事件 - 在渲染内容预览后调用
+function setupImageClickHandlers() {
+    // 确保模态框存在
+    const {modal, modalImg} = createImageModal();
+    
+    // 获取所有内容区域内的图片
+    const images = document.querySelectorAll('.content-body img');
+    
+    // 为每个图片添加点击事件
+    images.forEach(img => {
+        img.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            // 设置模态框图片源
+            modalImg.src = this.src;
+            
+            // 显示模态框
+            modal.classList.add('show');
+        });
+    });
+}
+
+// 修改渲染内容预览函数，添加对图片的处理
+function renderContentPreview(item) {
+    if (!contentPreview) {
+        console.error("内容预览元素未找到!");
+        return;
+    }
+    
+    if (!item) {
+        contentPreview.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未选择内容</p></div>';
+        return;
+    }
+    
+    console.log("渲染内容:", item.title, "内容长度:", item.content ? item.content.length : 0);
+    
+    const div = document.createElement('div');
+    div.innerHTML = `
+        <h4 class="content-title">${item.title || '无标题'}</h4>
+        <div class="content-info">
+            <div class="url-info">URL: <a href="${item.url}" target="_blank">${item.url}</a></div>
+            <div class="status-info">状态: ${item.status || '未知'}</div>
+        </div>
+        <div class="content-body">
+            ${item.content && item.content.includes('<') ? 
+                // HTML内容
+                item.content : 
+                // 纯文本内容或空内容
+                (item.content ? `<pre>${item.content}</pre>` : '<div class="text-muted">内容为空</div>')}
+        </div>
+    `;
+    
+    contentPreview.innerHTML = '';
+    contentPreview.appendChild(div);
+    
+    // 内容渲染后设置图片点击事件
+    setTimeout(setupImageClickHandlers, 100);
+}
