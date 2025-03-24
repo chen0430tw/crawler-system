@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
         reader.readAsText(file);
     }
     
-    // 处理爬虫结果
+    // 处理爬虫结果 - 修改版
     function processResults(results) {
         if (!results) {
             console.error("结果为空或格式不正确");
@@ -170,9 +170,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // 处理分类结果
+        // 处理分类结果 - 修改部分，确保所有分类都被处理
         if (results.categories) {
-            console.log("发现分类信息:", results.categories);
+            console.log("发现分类信息, 键数量:", Object.keys(results.categories).length);
+            // 打印详细的分类信息以便调试
+            Object.keys(results.categories).forEach(key => {
+                const category = results.categories[key];
+                console.log(`分类 ${key} 包含项目数量:`, category.items ? category.items.length : 0);
+            });
             renderCategoryList(results.categories);
         } else {
             console.error("分类信息不存在或格式错误");
@@ -277,7 +282,7 @@ document.addEventListener('DOMContentLoaded', function() {
         contentPreview.appendChild(div);
     }
     
-    // 渲染分类列表
+    // 渲染分类列表 - 修改版
     function renderCategoryList(categories) {
         if (!categoryList) {
             console.error("分类列表元素未找到!");
@@ -287,6 +292,7 @@ document.addEventListener('DOMContentLoaded', function() {
         categoryList.innerHTML = '';
         
         const categoryIds = Object.keys(categories);
+        console.log("待渲染的分类IDs:", categoryIds);
         
         if (categoryIds.length === 0) {
             categoryList.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">没有分类结果</p></div>';
@@ -295,11 +301,13 @@ document.addEventListener('DOMContentLoaded', function() {
         
         categoryIds.forEach(catId => {
             const category = categories[catId];
+            console.log(`正在渲染分类 ${catId}, 项目数量:`, category.items ? category.items.length : 0);
+            
             const div = document.createElement('div');
             div.className = 'list-group-item category-item';
             div.innerHTML = `
                 <div class="category-title">分类 ${catId}</div>
-                <div class="category-count">${category.items.length} 个页面</div>
+                <div class="category-count">${category.items ? category.items.length : 0} 个页面</div>
             `;
             
             div.addEventListener('click', function() {
@@ -329,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 渲染分类内容
+    // 渲染分类内容 - 修改版
     function renderCategoryItems(category) {
         if (!categoryContent) {
             console.error("分类内容元素未找到!");
@@ -341,6 +349,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        console.log(`渲染分类 ${category.id} 的内容, 包含 ${category.items.length} 个项目`);
+        
         const div = document.createElement('div');
         div.innerHTML = `
             <h4 class="mb-4">分类 ${category.id} (${category.items.length} 个页面)</h4>
@@ -350,7 +360,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <h5>${item.title || '无标题'}</h5>
                         <div class="item-url">${item.url}</div>
                         <div>
-                            ${(item.keywords || []).map(kw => `<span class="keyword">${kw}</span>`).join('')}
+                            ${(item.keywords && item.keywords.length > 0) ? 
+                                item.keywords.map(kw => `<span class="keyword">${kw}</span>`).join('') : 
+                                '<span class="text-muted">无关键词</span>'}
                         </div>
                     </div>
                 `).join('')}
@@ -425,4 +437,6 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("DOM已加载完成");
     console.log("URL输入框元素:", urlInput ? urlInput.tagName : "未找到");
     console.log("URL列表元素:", urlListElement ? urlListElement.tagName : "未找到");
+    console.log("分类列表元素:", categoryList ? categoryList.tagName : "未找到");
+    console.log("分类内容元素:", categoryContent ? categoryContent.tagName : "未找到");
 });
