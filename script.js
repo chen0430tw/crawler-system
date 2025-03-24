@@ -128,13 +128,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
-                crawlerResults = JSON.parse(e.target.result);
+                console.log("开始解析JSON文件");
+                const rawContent = e.target.result;
+                console.log("文件内容预览:", rawContent.substring(0, 200) + "...");
+                
+                crawlerResults = JSON.parse(rawContent);
+                console.log("解析成功，开始处理结果");
                 processResults(crawlerResults);
                 
                 // 自动切换到内容标签页
                 const contentTab = document.getElementById('content-tab');
                 contentTab.click();
             } catch (error) {
+                console.error("解析JSON失败:", error);
                 alert('无法解析结果文件: ' + error.message);
             }
         };
@@ -143,21 +149,38 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 处理爬虫结果
     function processResults(results) {
-        if (!results) return;
+        if (!results) {
+            console.error("结果为空或格式不正确");
+            return;
+        }
+        
+        console.log("处理爬虫结果:", results);  // 添加调试输出
         
         // 处理URL列表
         if (results.content && Array.isArray(results.content)) {
+            console.log("发现内容数组，长度:", results.content.length);
             renderUrlList(results.content);
+        } else {
+            console.error("内容数组不存在或格式错误:", results.content);
+            urlListElement.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">结果文件格式错误：未找到内容数组</p></div>';
         }
         
         // 处理分类结果
         if (results.categories) {
+            console.log("发现分类信息:", results.categories);
             renderCategoryList(results.categories);
+        } else {
+            console.error("分类信息不存在或格式错误");
+            categoryList.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未找到分类信息</p></div>';
         }
         
         // 处理统计信息
         if (results.statistics) {
+            console.log("发现统计信息");
             renderStatistics(results.statistics);
+        } else {
+            console.error("统计信息不存在或格式错误");
+            statisticsContent.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未找到统计信息</p></div>';
         }
     }
     
@@ -210,13 +233,21 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        console.log("渲染内容:", item.title, "内容长度:", item.content ? item.content.length : 0);
+        
         const div = document.createElement('div');
         div.innerHTML = `
             <h4 class="content-title">${item.title || '无标题'}</h4>
+            <div class="content-info">
+                <div class="url-info">URL: <a href="${item.url}" target="_blank">${item.url}</a></div>
+                <div class="status-info">状态: ${item.status || '未知'}</div>
+            </div>
             <div class="content-body">
-                ${item.format === 'html' || (item.content && item.content.includes('<')) ? 
+                ${item.content && item.content.includes('<') ? 
+                    // HTML内容
                     item.content : 
-                    `<pre>${item.content}</pre>`}
+                    // 纯文本内容或空内容
+                    (item.content ? `<pre>${item.content}</pre>` : '<div class="text-muted">内容为空</div>')}
             </div>
         `;
         

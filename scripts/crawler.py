@@ -132,11 +132,17 @@ class WebCrawler:
             if status_code == 200:
                 # 检查内容类型
                 content_type = response.headers.get('Content-Type', '')
-                if 'text/html' not in content_type and 'application/xhtml+xml' not in content_type:
-                    logger.warning(f"非HTML内容: {url}, 内容类型: {content_type}")
-                    return None, status_code
-                    
-                return response.text, status_code
+                
+                # 允许处理HTML和PDF等内容
+                if 'text/html' in content_type or 'application/xhtml+xml' in content_type:
+                    return response.text, status_code
+                elif 'application/pdf' in content_type:
+                    # 标记为PDF并返回内容
+                    logger.info(f"检测到PDF文件: {url}")
+                    return f"PDF_CONTENT_{url}", status_code
+                else:
+                    logger.warning(f"不支持的内容类型: {url}, 内容类型: {content_type}")
+                    return f"UNSUPPORTED_CONTENT_{content_type}", status_code
             elif status_code in [403, 429]:
                 # 可能被反爬，增加延迟后重试
                 retry_delay = self._get_random_delay(3, 10)
@@ -173,6 +179,14 @@ class WebCrawler:
         """
         if not html_content:
             return None, None, []
+            
+        # 处理PDF或其他不支持的内容
+        if isinstance(html_content, str) and html_content.startswith("PDF_CONTENT_"):
+            return f"PDF文件: {url}", f"这是一个PDF文件，无法直接显示内容。下载链接: {url}", []
+        
+        if isinstance(html_content, str) and html_content.startswith("UNSUPPORTED_CONTENT_"):
+            content_type = html_content.replace("UNSUPPORTED_CONTENT_", "")
+            return f"不支持的内容: {url}", f"这是一个{content_type}类型的文件，无法直接显示内容。下载链接: {url}", []
             
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -308,6 +322,11 @@ class DataProcessor:
         if not html_content:
             return ""
         
+        # 处理特殊内容类型
+        if isinstance(html_content, str) and (html_content.startswith("PDF_CONTENT_") or
+                                             html_content.startswith("UNSUPPORTED_CONTENT_")):
+            return html_content
+        
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -362,6 +381,16 @@ class DataProcessor:
         """
         if not html_content:
             return ""
+            
+        # 处理特殊内容类型
+        if isinstance(html_content, str) and (html_content.startswith("PDF_CONTENT_") or
+                                             html_content.startswith("UNSUPPORTED_CONTENT_")):
+            if html_content.startswith("PDF_CONTENT_"):
+                url = html_content.replace("PDF_CONTENT_", "")
+                return f"这是一个PDF文件，无法直接显示内容。下载链接: {url}"
+            else:
+                content_type = html_content.replace("UNSUPPORTED_CONTENT_", "")
+                return f"这是一个{content_type}类型的文件，无法直接显示内容。"
             
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
@@ -569,6 +598,16 @@ class DataProcessor:
         """
         if not content:
             return ""
+            
+        # 处理特殊内容类型
+        if isinstance(content, str) and (content.startswith("PDF_CONTENT_") or
+                                        content.startswith("UNSUPPORTED_CONTENT_")):
+            if content.startswith("PDF_CONTENT_"):
+                url = content.replace("PDF_CONTENT_", "")
+                return f"这是一个PDF文件，无法直接显示内容。下载链接: {url}"
+            else:
+                content_type = content.replace("UNSUPPORTED_CONTENT_", "")
+                return f"这是一个{content_type}类型的文件，无法直接显示内容。"
             
         if format_type.lower() == 'txt':
             # 确保纯文本格式
@@ -872,27 +911,45 @@ def main():
         
         print("处理爬取内容...")
         for url, data in all_results.items():
-            if data.get("content") and data.get("html"):
-                # 清洗HTML
-                clean_html = processor.clean_html(data["html"])
+            # 提取内容
+            title = data.get("title")
+            content = data.get("content")
+            html_content = data.get("html")
+            status = data.get("status")
+            
+            # 跳过无效内容
+            if not content and not html_content:
+                continue
                 
-                # 提取文本或格式化HTML
-                if format_type == "txt":
-                    clean_content = processor.extract_text_from_html(clean_html)
+            # 处理HTML内容
+            if html_content:
+                # 检查是否是PDF或其他特殊内容
+                if isinstance(html_content, str) and (html_content.startswith("PDF_CONTENT_") or 
+                                                     html_content.startswith("UNSUPPORTED_CONTENT_")):
+                    clean_content = content  # 使用parse_html生成的描述性内容
                 else:
-                    clean_content = clean_html
-                
-                # 关键词提取
-                text_content = processor.extract_text_from_html(clean_html)
-                keywords = processor.extract_keywords(text_content)
+                    # 正常的HTML内容
+                    clean_html = processor.clean_html(html_content)
+                    
+                    # 提取文本或格式化HTML
+                    if format_type == "txt":
+                        clean_content = processor.extract_text_from_html(clean_html)
+                    else:
+                        clean_content = clean_html
+                        
+                # 提取关键词（对于所有内容类型）
+                keywords = []
+                if content:
+                    keywords = processor.extract_keywords(content)
                 
                 # 存储内容
                 metadata = {
-                    "title": data.get("title", ""),
+                    "title": title or "无标题",
                     "url": url,
                     "depth": data.get("depth", 0),
                     "crawl_time": datetime.now().isoformat(),
-                    "keywords": keywords
+                    "keywords": keywords,
+                    "content_type": "pdf" if isinstance(html_content, str) and html_content.startswith("PDF_CONTENT_") else "html"
                 }
                 
                 file_path = storage.save_content(
@@ -905,12 +962,13 @@ def main():
                 # 构造处理后的内容对象
                 processed_item = {
                     "url": url,
-                    "title": data.get("title", ""),
+                    "title": title or "无标题",
                     "content": clean_content,
                     "keywords": keywords,
                     "file_path": file_path,
                     "depth": data.get("depth", 0),
-                    "format": format_type
+                    "format": format_type,
+                    "status": status
                 }
                 
                 processed_content.append(processed_item)
