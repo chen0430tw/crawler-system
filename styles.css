@@ -194,3 +194,54 @@ header {
         width: 100%;
     }
 }
+
+/* 修复内容溢出问题 */
+.content-body, .content-info, pre {
+    max-width: 100%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+}
+
+a {
+    word-break: break-all;
+}
+
+#contentPreview div {
+    max-width: 100%;
+    overflow-wrap: break-word;
+}
+
+pre {
+    white-space: pre-wrap;
+}
+
+.content-body {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .content-info, .url-info, .status-info {
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+}
+
+/* 修复长URL和内容显示 */
+.item-url {
+    white-space: normal;
+    word-break: break-all;
+}
+
+.url-path {
+    white-space: normal;
+    word-break: break-all;
+}
+
+/* 确保内容列表能够适当换行 */
+.content-info a, .url-info a {
+    display: inline-block;
+    max-width: 100%;
+    word-break: break-all;
+}
