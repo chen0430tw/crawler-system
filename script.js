@@ -7,11 +7,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const browseBtn = document.getElementById('browseBtn');
     const resultFile = document.getElementById('resultFile');
     
+    // 修改：分离URL输入框和URL结果列表的引用
+    const urlInput = document.getElementById('urlList'); // 配置面板中的URL输入文本区域
+    const urlListElement = document.querySelector('#content .list-group'); // URL结果列表容器
+    
     // 标签页引用
     const resultTabs = document.getElementById('resultTabs');
     
     // 内容展示区引用
-    const urlListElement = document.getElementById('urlList');
     const contentPreview = document.getElementById('contentPreview');
     const categoryList = document.getElementById('categoryList');
     const categoryContent = document.getElementById('categoryContent');
@@ -24,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 生成配置文件
     generateBtn.addEventListener('click', function() {
-        const urlList = document.getElementById('urlList').value.split('\n')
+        const urlList = urlInput.value.split('\n')
             .map(url => url.trim())
             .filter(url => url.length > 0);
         
@@ -60,7 +63,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 清除输入
     clearBtn.addEventListener('click', function() {
-        document.getElementById('urlList').value = '';
+        urlInput.value = '';
         document.getElementById('crawlDepth').value = '2';
         document.getElementById('formatHtml').checked = true;
         document.getElementById('concurrency').value = '3';
@@ -133,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log("文件内容预览:", rawContent.substring(0, 200) + "...");
                 
                 crawlerResults = JSON.parse(rawContent);
-                console.log("解析成功，开始处理结果");
+                console.log("解析成功，开始处理结果", crawlerResults);
                 processResults(crawlerResults);
                 
                 // 自动切换到内容标签页
@@ -162,7 +165,9 @@ document.addEventListener('DOMContentLoaded', function() {
             renderUrlList(results.content);
         } else {
             console.error("内容数组不存在或格式错误:", results.content);
-            urlListElement.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">结果文件格式错误：未找到内容数组</p></div>';
+            if (urlListElement) {
+                urlListElement.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">结果文件格式错误：未找到内容数组</p></div>';
+            }
         }
         
         // 处理分类结果
@@ -171,7 +176,9 @@ document.addEventListener('DOMContentLoaded', function() {
             renderCategoryList(results.categories);
         } else {
             console.error("分类信息不存在或格式错误");
-            categoryList.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未找到分类信息</p></div>';
+            if (categoryList) {
+                categoryList.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未找到分类信息</p></div>';
+            }
         }
         
         // 处理统计信息
@@ -180,12 +187,20 @@ document.addEventListener('DOMContentLoaded', function() {
             renderStatistics(results.statistics);
         } else {
             console.error("统计信息不存在或格式错误");
-            statisticsContent.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未找到统计信息</p></div>';
+            if (statisticsContent) {
+                statisticsContent.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未找到统计信息</p></div>';
+            }
         }
     }
     
     // 渲染URL列表
     function renderUrlList(contentList) {
+        if (!urlListElement) {
+            console.error("URL列表元素未找到!");
+            return;
+        }
+        
+        console.log("渲染URL列表到元素:", urlListElement.tagName, urlListElement.id, urlListElement.className);
         urlListElement.innerHTML = '';
         
         if (contentList.length === 0) {
@@ -220,14 +235,21 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 默认选中第一项
         if (contentList.length > 0) {
-            urlListElement.firstChild.classList.add('active');
-            selectedUrlIndex = 0;
-            renderContentPreview(contentList[0]);
+            if (urlListElement.firstChild) {
+                urlListElement.firstChild.classList.add('active');
+                selectedUrlIndex = 0;
+                renderContentPreview(contentList[0]);
+            }
         }
     }
     
     // 渲染内容预览
     function renderContentPreview(item) {
+        if (!contentPreview) {
+            console.error("内容预览元素未找到!");
+            return;
+        }
+        
         if (!item) {
             contentPreview.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">未选择内容</p></div>';
             return;
@@ -257,6 +279,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 渲染分类列表
     function renderCategoryList(categories) {
+        if (!categoryList) {
+            console.error("分类列表元素未找到!");
+            return;
+        }
+        
         categoryList.innerHTML = '';
         
         const categoryIds = Object.keys(categories);
@@ -294,14 +321,21 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 默认选中第一项
         if (categoryIds.length > 0) {
-            categoryList.firstChild.classList.add('active');
-            selectedCategoryId = categoryIds[0];
-            renderCategoryItems(categories[categoryIds[0]]);
+            if (categoryList.firstChild) {
+                categoryList.firstChild.classList.add('active');
+                selectedCategoryId = categoryIds[0];
+                renderCategoryItems(categories[categoryIds[0]]);
+            }
         }
     }
     
     // 渲染分类内容
     function renderCategoryItems(category) {
+        if (!categoryContent) {
+            console.error("分类内容元素未找到!");
+            return;
+        }
+        
         if (!category || !category.items) {
             categoryContent.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">无分类内容</p></div>';
             return;
@@ -329,6 +363,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 渲染统计信息
     function renderStatistics(stats) {
+        if (!statisticsContent) {
+            console.error("统计内容元素未找到!");
+            return;
+        }
+        
         if (!stats) {
             statisticsContent.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">无统计信息</p></div>';
             return;
@@ -381,4 +420,9 @@ document.addEventListener('DOMContentLoaded', function() {
         statisticsContent.innerHTML = '';
         statisticsContent.appendChild(div);
     }
+    
+    // 添加启动时的调试信息
+    console.log("DOM已加载完成");
+    console.log("URL输入框元素:", urlInput ? urlInput.tagName : "未找到");
+    console.log("URL列表元素:", urlListElement ? urlListElement.tagName : "未找到");
 });
