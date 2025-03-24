@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全息拉普拉斯互联网爬虫系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="py-3 mb-4 border-bottom">
+            <h1 class="text-center">全息拉普拉斯互联网爬虫系统</h1>
+        </header>
+
+        <main>
+            <div class="row">
+                <!-- 左侧配置面板 -->
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4>爬虫配置</h4>
+                        </div>
+                        <div class="card-body">
+                            <form id="crawlerForm">
+                                <div class="mb-3">
+                                    <label for="urlList" class="form-label">URL列表</label>
+                                    <textarea id="urlList" class="form-control" rows="8" placeholder="输入URL，每行一个，例如: https://example.com"></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="crawlDepth" class="form-label">爬取深度</label>
+                                    <select id="crawlDepth" class="form-select">
+                                        <option value="1">1级 (只爬取输入页面)</option>
+                                        <option value="2" selected>2级 (包含链接页面)</option>
+                                        <option value="3">3级 (包含二级链接)</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">存储格式</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="storageFormat" id="formatTxt" value="txt">
+                                        <label class="form-check-label" for="formatTxt">TXT 格式</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="storageFormat" id="formatHtml" value="html" checked>
+                                        <label class="form-check-label" for="formatHtml">HTML 格式</label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="concurrency" class="form-label">并发数</label>
+                                    <select id="concurrency" class="form-select">
+                                        <option value="1">1 (低)</option>
+                                        <option value="3" selected>3 (中)</option>
+                                        <option value="5">5 (高)</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="button" id="generateBtn" class="btn btn-primary">生成配置文件</button>
+                                    <a id="downloadLink" class="btn btn-success d-none" download="crawler_config.json">下载配置文件</a>
+                                    <button type="button" id="clearBtn" class="btn btn-secondary">清除输入</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h4>使用说明</h4>
+                        </div>
+                        <div class="card-body">
+                            <ol class="small">
+                                <li>在URL列表中输入要爬取的网站地址</li>
+                                <li>设置爬取深度和存储格式</li>
+                                <li>点击"生成配置文件"并下载</li>
+                                <li><a href="https://github.com/yourusername/crawler-script" target="_blank">下载爬虫脚本</a></li>
+                                <li>将配置文件放在脚本同目录下运行</li>
+                                <li>脚本完成后，将生成的结果文件上传到此处查看</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧内容展示面板 -->
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <ul class="nav nav-tabs card-header-tabs" id="resultTabs">
+                                <li class="nav-item">
+                                    <a class="nav-link active" id="upload-tab" data-bs-toggle="tab" href="#upload">上传结果</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" id="content-tab" data-bs-toggle="tab" href="#content">抓取内容</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" id="category-tab" data-bs-toggle="tab" href="#category">分类结果</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" id="stats-tab" data-bs-toggle="tab" href="#stats">统计信息</a>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="card-body">
+                            <div class="tab-content">
+                                <!-- 上传结果标签页 -->
+                                <div class="tab-pane fade show active" id="upload">
+                                    <div class="text-center py-5">
+                                        <h5 class="mb-4">上传爬虫结果文件</h5>
+                                        <div class="upload-area mb-4" id="uploadArea">
+                                            <div class="upload-icon">
+                                                <i class="bi bi-cloud-arrow-up fs-1"></i>
+                                            </div>
+                                            <p>拖放结果文件到此处或点击选择文件</p>
+                                            <input type="file" id="resultFile" class="d-none" accept=".json">
+                                        </div>
+                                        <button id="browseBtn" class="btn btn-outline-primary">选择文件</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- 抓取内容标签页 -->
+                                <div class="tab-pane fade" id="content">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="list-group" id="urlList">
+                                                <div class="empty-message text-center py-5">
+                                                    <p class="text-muted">请先上传爬虫结果文件</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <div id="contentPreview">
+                                                <div class="empty-message text-center py-5">
+                                                    <p class="text-muted">选择左侧链接查看内容</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 分类结果标签页 -->
+                                <div class="tab-pane fade" id="category">
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <div class="list-group" id="categoryList">
+                                                <div class="empty-message text-center py-5">
+                                                    <p class="text-muted">请先上传爬虫结果文件</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <div id="categoryContent">
+                                                <div class="empty-message text-center py-5">
+                                                    <p class="text-muted">选择左侧分类查看内容</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 统计信息标签页 -->
+                                <div class="tab-pane fade" id="stats">
+                                    <div id="statisticsContent">
+                                        <div class="empty-message text-center py-5">
+                                            <p class="text-muted">请先上传爬虫结果文件</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="py-3 my-4 border-top">
+            <div class="text-center">
+                <span class="text-muted">全息拉普拉斯互联网爬虫系统 &copy; 2023</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
