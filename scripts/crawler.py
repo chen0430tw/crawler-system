@@ -761,13 +761,21 @@ class StorageManager:
             base_dir: 基础存储目录
         """
         self.base_dir = base_dir
+        # 创建带时间戳的子目录
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.run_dir = os.path.join(base_dir, f"run_{timestamp}")
         self._ensure_base_dir()
         
     def _ensure_base_dir(self):
-        """确保基础目录存在"""
+        """确保基础目录和运行目录存在"""
         if not os.path.exists(self.base_dir):
             os.makedirs(self.base_dir)
             logger.info(f"创建基础目录: {self.base_dir}")
+            
+        # 确保运行子目录存在
+        if not os.path.exists(self.run_dir):
+            os.makedirs(self.run_dir)
+            logger.info(f"创建运行目录: {self.run_dir}")
             
     def _get_domain_dir(self, url):
         """
@@ -782,8 +790,8 @@ class StorageManager:
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
         
-        # 创建域名目录
-        domain_dir = os.path.join(self.base_dir, domain)
+        # 创建域名目录 (在运行子目录下)
+        domain_dir = os.path.join(self.run_dir, domain)
         if not os.path.exists(domain_dir):
             os.makedirs(domain_dir)
             
@@ -819,11 +827,8 @@ class StorageManager:
         path = path.replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_')
         path = path.replace('|', '_')
         
-        # 添加时间戳防止文件名冲突
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        
-        # 生成文件名
-        filename = f"{path}_{timestamp}.{format_type}"
+        # 生成文件名 (不再需要时间戳，因为已经在目录中包含了)
+        filename = f"{path}.{format_type}"
         
         # 获取域名目录
         domain_dir = self._get_domain_dir(url)
@@ -899,7 +904,15 @@ class StorageManager:
                 saved_paths.append(path)
                 
         return saved_paths
-
+        
+    def get_run_directory(self):
+        """
+        获取当前运行的目录路径
+        
+        返回:
+            当前运行的目录路径
+        """
+        return self.run_dir
 
 def calculate_statistics(all_results, processed_content, categorized_content, task_info):
     """
@@ -1002,6 +1015,9 @@ def main():
     crawler = WebCrawler(max_workers=concurrency)
     processor = DataProcessor()
     storage = StorageManager(base_dir='./crawled_data')
+    
+    # 将运行目录记录到任务信息中
+    task_info["run_directory"] = storage.get_run_directory()
     
     try:
         # 批量爬取
@@ -1113,11 +1129,19 @@ def main():
             "statistics": statistics
         }
         
-        # 保存结果
+        # 保存结果 (将结果也保存到运行目录下)
+        result_path = os.path.join(storage.get_run_directory(), args.output)
+        with open(result_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+        
+        # 另外在当前目录下也保存一份结果，这样用户仍然可以在当前目录找到最新的结果
         with open(args.output, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
         
-        print(f"爬取完成！结果已保存到 {args.output}")
+        print(f"爬取完成！结果已保存到:")
+        print(f" - {result_path}")
+        print(f" - {os.path.abspath(args.output)} (复制)")
+        print(f"数据文件保存在: {storage.get_run_directory()}")
         print(f"总共爬取 {len(all_results)} 个页面，成功率 {statistics['successRate']}%")
         print(f"用时 {task_info['duration']:.2f} 秒")
         print("请将结果文件上传到网页界面查看详细分析")
@@ -1130,7 +1154,6 @@ def main():
     finally:
         # 关闭资源
         crawler.close()
-
 
 if __name__ == "__main__":
     main()
