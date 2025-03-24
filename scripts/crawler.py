@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import re
 import random
+import numpy as np
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +27,7 @@ try:
     import requests
     from bs4 import BeautifulSoup
     import nltk
+    nltk.download('punkt_tab')
     from nltk.corpus import stopwords
     from nltk.tokenize import word_tokenize
     from nltk.stem import WordNetLemmatizer
@@ -35,6 +37,17 @@ except ImportError:
     print("缺少必要的库。请运行以下命令安装依赖:")
     print("pip install requests beautifulsoup4 nltk scikit-learn")
     sys.exit(1)
+
+# 创建自定义JSON编码器，处理NumPy类型
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
 
 # 设置日志
 logging.basicConfig(
@@ -487,23 +500,99 @@ class DataProcessor:
             # 清洗文本
             text = self.clean_text(text)
             
-            # 分词
-            tokens = word_tokenize(text)
-            
-            # 移除停用词和短单词
-            tokens = [token for token in tokens if token not in self.stop_words and len(token) > 2]
-            
-            # 词形还原
-            tokens = [self.lemmatizer.lemmatize(token) for token in tokens]
-            
-            # 重新组合为文本
-            preprocessed_text = ' '.join(tokens)
-            
-            return preprocessed_text
-            
+            # 尝试使用nltk进行分词
+            try:
+                tokens = word_tokenize(text)
+                
+                # 移除停用词和短单词
+                tokens = [token for token in tokens if token not in self.stop_words and len(token) > 2]
+                
+                # 词形还原
+                tokens = [self.lemmatizer.lemmatize(token) for token in tokens]
+                
+                # 重新组合为文本
+                preprocessed_text = ' '.join(tokens)
+                
+                return preprocessed_text
+            except LookupError as e:
+                # 如果缺少NLTK资源，使用简单的空格分词作为回退
+                logger.warning(f"NLTK资源缺失，使用简单分词: {str(e)}")
+                
+                # 简单分词
+                tokens = text.split()
+                
+                # 移除短单词
+                tokens = [token for token in tokens if len(token) > 2]
+                
+                return ' '.join(tokens)
+                
         except Exception as e:
             logger.error(f"预处理文本出错: {str(e)}")
+            # 返回原始文本作为回退
             return text
+    
+    def extract_keywords(self, text, top_n=10):
+        """
+        提取文本关键词
+        
+        参数:
+            text: 文本内容
+            top_n: 返回的关键词数量
+            
+        返回:
+            关键词列表
+        """
+        if not text:
+            return []
+            
+        try:
+            # 尝试使用NLTK
+            try:
+                # 预处理文本
+                preprocessed_text = self.preprocess_text(text)
+                
+                # 分词
+                tokens = word_tokenize(preprocessed_text)
+                
+                # 计算词频
+                word_freq = {}
+                for token in tokens:
+                    if token in word_freq:
+                        word_freq[token] += 1
+                    else:
+                        word_freq[token] = 1
+                
+                # 选择频率最高的词作为关键词
+                keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:top_n]
+                
+                return [keyword for keyword, _ in keywords]
+                
+            except LookupError as e:
+                # 如果缺少NLTK资源，使用简单的方法提取关键词
+                logger.warning(f"NLTK资源缺失，使用简单关键词提取: {str(e)}")
+                
+                # 简单分词
+                tokens = text.lower().split()
+                
+                # 移除短单词
+                tokens = [token for token in tokens if len(token) > 2]
+                
+                # 计算词频
+                word_freq = {}
+                for token in tokens:
+                    if token in word_freq:
+                        word_freq[token] += 1
+                    else:
+                        word_freq[token] = 1
+                
+                # 选择频率最高的词作为关键词
+                keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:top_n]
+                
+                return [keyword for keyword, _ in keywords]
+                
+        except Exception as e:
+            logger.error(f"提取关键词出错: {str(e)}")
+            return []
     
     def classify_content(self, content_list, n_clusters=5):
         """
@@ -521,69 +610,60 @@ class DataProcessor:
             
         try:
             # 预处理所有文本
-            preprocessed_texts = [self.preprocess_text(text) for text in content_list]
-            
-            # 使用TF-IDF向量化文本
-            vectorizer = TfidfVectorizer(max_features=1000)
-            X = vectorizer.fit_transform(preprocessed_texts)
-            
-            # 使用K-Means聚类
-            kmeans = KMeans(n_clusters=min(n_clusters, len(content_list)), random_state=42)
-            kmeans.fit(X)
-            
-            # 获取聚类结果
-            labels = kmeans.labels_
-            
-            # 整理分类结果
-            clusters = {}
-            for i, label in enumerate(labels):
-                if label not in clusters:
-                    clusters[label] = []
-                clusters[label].append(i)
+            try:
+                preprocessed_texts = [self.preprocess_text(text) for text in content_list]
                 
-            return clusters
-            
+                # 使用TF-IDF向量化文本
+                vectorizer = TfidfVectorizer(max_features=1000)
+                X = vectorizer.fit_transform(preprocessed_texts)
+                
+                # 使用K-Means聚类
+                kmeans = KMeans(n_clusters=min(n_clusters, len(content_list)), random_state=42)
+                kmeans.fit(X)
+                
+                # 获取聚类结果
+                labels = kmeans.labels_
+                
+                # 整理分类结果
+                clusters = {}
+                for i, label in enumerate(labels):
+                    label_int = int(label)  # 确保标签是Python原生整数
+                    if label_int not in clusters:
+                        clusters[label_int] = []
+                    clusters[label_int].append(i)
+                    
+                return clusters
+                
+            except LookupError as e:
+                # NLTK问题，使用简单分类
+                logger.warning(f"NLTK相关错误，使用简单分类: {str(e)}")
+                
+                # 平均分配到n_clusters组
+                n = len(content_list)
+                actual_clusters = min(n_clusters, n)
+                
+                # 如果数据太少，就分成一组
+                if n <= actual_clusters:
+                    return {0: list(range(n))}
+                    
+                # 简单分组 - 平均分配
+                clusters = {}
+                items_per_cluster = n // actual_clusters
+                remainder = n % actual_clusters
+                
+                start = 0
+                for i in range(actual_clusters):
+                    # 为前remainder个组多分配一个元素
+                    count = items_per_cluster + (1 if i < remainder else 0)
+                    clusters[i] = list(range(start, start + count))
+                    start += count
+                    
+                return clusters
+                
         except Exception as e:
             logger.error(f"分类内容出错: {str(e)}")
+            # 返回单一分类作为回退
             return {0: list(range(len(content_list)))}
-    
-    def extract_keywords(self, text, top_n=10):
-        """
-        提取文本关键词
-        
-        参数:
-            text: 文本内容
-            top_n: 返回的关键词数量
-            
-        返回:
-            关键词列表
-        """
-        if not text:
-            return []
-            
-        try:
-            # 预处理文本
-            preprocessed_text = self.preprocess_text(text)
-            
-            # 分词
-            tokens = word_tokenize(preprocessed_text)
-            
-            # 计算词频
-            word_freq = {}
-            for token in tokens:
-                if token in word_freq:
-                    word_freq[token] += 1
-                else:
-                    word_freq[token] = 1
-            
-            # 选择频率最高的词作为关键词
-            keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:top_n]
-            
-            return [keyword for keyword, _ in keywords]
-            
-        except Exception as e:
-            logger.error(f"提取关键词出错: {str(e)}")
-            return []
     
     def format_content(self, content, format_type='txt'):
         """
@@ -823,10 +903,11 @@ def calculate_statistics(all_results, processed_content, categorized_content, ta
     # 计算状态码统计
     for url, data in all_results.items():
         status = data.get("status", 0)
-        if status in statistics["statusCounts"]:
-            statistics["statusCounts"][status] += 1
+        status_str = str(status)  # 确保键是字符串，避免JSON序列化问题
+        if status_str in statistics["statusCounts"]:
+            statistics["statusCounts"][status_str] += 1
         else:
-            statistics["statusCounts"][status] = 1
+            statistics["statusCounts"][status_str] = 1
     
     # 计算域名统计
     for url in all_results.keys():
@@ -1012,7 +1093,7 @@ def main():
         
         # 保存结果
         with open(args.output, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+            json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
         
         print(f"爬取完成！结果已保存到 {args.output}")
         print(f"总共爬取 {len(all_results)} 个页面，成功率 {statistics['successRate']}%")
