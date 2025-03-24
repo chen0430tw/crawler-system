@@ -61,15 +61,58 @@ logging.basicConfig(
 logger = logging.getLogger("Crawler")
 
 # 确保NLTK资源可用
+def ensure_nltk_resources():
+    """检查并确保所需的NLTK资源可用，只在必要时下载"""
+    resources = [
+        ('tokenizers/punkt_tab', 'punkt_tab'),  # 特殊资源
+        ('tokenizers/punkt', 'punkt'),
+        ('corpora/stopwords', 'stopwords'),
+        ('corpora/wordnet', 'wordnet')
+    ]
+    
+    missing_resources = []
+    
+    # 检查哪些资源缺失
+    for path, package in resources:
+        try:
+            nltk.data.find(path)
+            logger.info(f"NLTK资源已存在: {package}")
+        except LookupError:
+            missing_resources.append(package)
+    
+    # 只下载缺失的资源
+    if missing_resources:
+        logger.info(f"下载缺失的NLTK资源: {', '.join(missing_resources)}")
+        for package in missing_resources:
+            try:
+                print(f"下载NLTK资源: {package}...")
+                nltk.download(package, quiet=False)
+                print(f"已成功下载: {package}")
+            except Exception as e:
+                logger.error(f"下载NLTK资源 {package} 失败: {str(e)}")
+                print(f"错误: 无法下载 {package}, 详情: {str(e)}")
+    else:
+        logger.info("所有必需的NLTK资源已安装")
+
+# 替换原代码中的导入和NLTK资源检查部分
 try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    print("下载NLTK资源...")
-    nltk.download('punkt')
-    nltk.download('stopwords')
-    nltk.download('wordnet')
+    import requests
+    from bs4 import BeautifulSoup
+    import nltk
+    
+    # 统一使用ensure_nltk_resources函数进行资源检查和下载
+    # 不再单独调用nltk.download('punkt_tab')
+    ensure_nltk_resources()
+    
+    from nltk.corpus import stopwords
+    from nltk.tokenize import word_tokenize
+    from nltk.stem import WordNetLemmatizer
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.cluster import KMeans
+except ImportError:
+    print("缺少必要的库。请运行以下命令安装依赖:")
+    print("pip install requests beautifulsoup4 nltk scikit-learn")
+    sys.exit(1)
 
 
 class WebCrawler:
