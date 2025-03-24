@@ -322,12 +322,13 @@ class DataProcessor:
         self.stop_words = set(stopwords.words('english'))
         self.lemmatizer = WordNetLemmatizer()
         
-    def clean_html(self, html_content):
+    def clean_html(self, html_content, base_url=None):
         """
-        清洗HTML内容，移除导航栏、广告、页脚等
+        清洗HTML内容，移除导航栏、广告、页脚等，并转换相对URL为绝对URL
         
         参数:
             html_content: 原始HTML内容
+            base_url: HTML内容的基础URL，用于转换相对URL
             
         返回:
             清洗后的HTML内容
@@ -346,7 +347,7 @@ class DataProcessor:
             # 移除常见噪声元素
             noise_tags = [
                 'script', 'style', 'nav', 'footer', 'header', 'aside',
-                'iframe', 'noscript', 'meta', 'link', 'svg'
+                'iframe', 'noscript', 'meta', 'svg'
             ]
             
             for tag in noise_tags:
@@ -364,6 +365,27 @@ class DataProcessor:
                     element.decompose()
                 for element in soup.find_all(id=re.compile(cls, re.I)):
                     element.decompose()
+            
+            # 如果提供了基础URL，将所有相对URL转换为绝对URL
+            if base_url:
+                # 转换图片链接
+                for img in soup.find_all('img', src=True):
+                    img['src'] = urljoin(base_url, img['src'])
+                
+                # 转换CSS链接
+                for link in soup.find_all('link', href=True):
+                    link['href'] = urljoin(base_url, link['href'])
+                
+                # 转换超链接
+                for a in soup.find_all('a', href=True):
+                    a['href'] = urljoin(base_url, a['href'])
+                
+                # 转换其他可能的相对URL资源
+                for elem in soup.find_all(src=True):
+                    elem['src'] = urljoin(base_url, elem['src'])
+                
+                for elem in soup.find_all(href=True):
+                    elem['href'] = urljoin(base_url, elem['href'])
             
             # 保留主要内容区域
             main_content = soup.find('main') or soup.find('article') or soup.find('div', class_=re.compile('content|article|post|body', re.I))
@@ -1009,8 +1031,8 @@ def main():
                                                      html_content.startswith("UNSUPPORTED_CONTENT_")):
                     clean_content = content  # 使用parse_html生成的描述性内容
                 else:
-                    # 正常的HTML内容
-                    clean_html = processor.clean_html(html_content)
+                    # 正常的HTML内容 - 注意这里传入了URL作为base_url
+                    clean_html = processor.clean_html(html_content, url)
                     
                     # 提取文本或格式化HTML
                     if format_type == "txt":
