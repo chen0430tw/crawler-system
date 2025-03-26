@@ -49,13 +49,19 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return super(NumpyEncoder, self).default(obj)
 
+# 强制控制台输出使用UTF-8
+if sys.platform == 'win32':
+    # 为Windows环境设置UTF-8编码
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 # 设置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("crawler.log"),
-        logging.StreamHandler()
+        logging.FileHandler("crawler.log", encoding='utf-8'),  # 指定文件使用UTF-8编码
+        logging.StreamHandler(sys.stdout)  # 使用已配置为UTF-8的标准输出
     ]
 )
 logger = logging.getLogger("Crawler")
@@ -224,14 +230,14 @@ class WebCrawler:
     
     def parse_html(self, html_content, url):
         """
-        解析HTML内容
+        解析HTML内容，包括提取内嵌媒体
         
         参数:
             html_content: HTML内容字符串
             url: 原始URL（用于解析相对链接）
             
         返回:
-            (title, content, links) 元组
+            (title, content, links) 元组，media信息存储在content中
         """
         if not html_content:
             return None, None, []
@@ -263,6 +269,41 @@ class WebCrawler:
                 # 排除锚点链接和JavaScript链接
                 if not href.startswith('#') and not href.startswith('javascript:'):
                     links.append(absolute_url)
+            
+            # 提取内嵌媒体内容
+            media = extract_embedded_media(html_content, url)
+            
+            # 将媒体信息添加到内容中
+            if media:
+                media_content = "\n\n嵌入的媒体内容:\n"
+                
+                if "youtube" in media:
+                    media_content += "\nYouTube视频:\n"
+                    for youtube_url in media["youtube"]:
+                        media_content += f"- {youtube_url}\n"
+                
+                if "twitter" in media:
+                    media_content += "\nTwitter内容:\n"
+                    for twitter_url in media["twitter"]:
+                        media_content += f"- {twitter_url}\n"
+                
+                if "vimeo" in media:
+                    media_content += "\nVimeo视频:\n"
+                    for vimeo_url in media["vimeo"]:
+                        media_content += f"- {vimeo_url}\n"
+                
+                if "instagram" in media:
+                    media_content += "\nInstagram内容:\n"
+                    for instagram_url in media["instagram"]:
+                        media_content += f"- {instagram_url}\n"
+                
+                if "other_embedded" in media:
+                    media_content += "\n其他嵌入内容:\n"
+                    for other_url in media["other_embedded"]:
+                        media_content += f"- {other_url}\n"
+                
+                # 将媒体内容附加到原内容后
+                content += media_content
                     
             return title, content, links
             
@@ -357,6 +398,84 @@ class WebCrawler:
         self.session.close()
 
 
+def extract_embedded_media(html_content, base_url=None):
+    """
+    从HTML内容中提取内嵌的媒体内容（YouTube视频、Twitter帖子等）
+    
+    参数:
+        html_content: HTML内容
+        base_url: 基础URL，用于解析相对链接
+        
+    返回:
+        媒体内容字典，格式为 {类型: [链接列表]}
+    """
+    if not html_content:
+        return {}
+        
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        media = {
+            "youtube": [],
+            "twitter": [],
+            "vimeo": [],
+            "instagram": [],
+            "other_embedded": []
+        }
+        
+        # 提取YouTube视频 (iframe方式)
+        for iframe in soup.find_all('iframe'):
+            src = iframe.get('src', '')
+            if not src:
+                continue
+                
+            # 转换相对URL为绝对URL
+            if base_url and not (src.startswith('http://') or src.startswith('https://')):
+                src = urljoin(base_url, src)
+                
+            # 检测YouTube
+            if 'youtube.com/embed/' in src or 'youtube-nocookie.com/embed/' in src:
+                media["youtube"].append(src)
+            # 检测Vimeo
+            elif 'player.vimeo.com/video/' in src:
+                media["vimeo"].append(src)
+            # 其他iframe嵌入
+            else:
+                media["other_embedded"].append(src)
+        
+        # 提取Twitter帖子 (常见的嵌入方式)
+        for div in soup.find_all('div', class_=lambda c: c and ('twitter-tweet' in c or 'twitter-timeline' in c)):
+            # 寻找Twitter链接
+            for a in div.find_all('a'):
+                href = a.get('href', '')
+                if 'twitter.com' in href and not href in media["twitter"]:
+                    media["twitter"].append(href)
+        
+        # 提取Twitter链接 (另一种方式)
+        for blockquote in soup.find_all('blockquote', class_=lambda c: c and 'twitter-tweet' in c):
+            for a in blockquote.find_all('a'):
+                href = a.get('href', '')
+                if 'twitter.com' in href and not href in media["twitter"]:
+                    media["twitter"].append(href)
+        
+        # 提取Instagram帖子
+        for blockquote in soup.find_all('blockquote', class_=lambda c: c and 'instagram-media' in c):
+            for a in blockquote.find_all('a'):
+                href = a.get('href', '')
+                if 'instagram.com/p/' in href and not href in media["instagram"]:
+                    media["instagram"].append(href)
+        
+        # 移除空列表
+        for k in list(media.keys()):
+            if not media[k]:
+                del media[k]
+                
+        return media
+        
+    except Exception as e:
+        logger.error(f"提取媒体内容出错: {str(e)}")
+        return {}
+
+
 class DataProcessor:
     """数据处理类，负责清洗和分类网页内容"""
     
@@ -367,7 +486,7 @@ class DataProcessor:
         
     def clean_html(self, html_content, base_url=None):
         """
-        清洗HTML内容，移除导航栏、广告、页脚等，并转换相对URL为绝对URL
+        清洗HTML内容，移除导航栏、广告、页脚等，但保留媒体内容的引用
         
         参数:
             html_content: 原始HTML内容
@@ -387,11 +506,15 @@ class DataProcessor:
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             
+            # 提取内嵌媒体内容（在删除前）
+            media = extract_embedded_media(html_content, base_url)
+            
             # 移除常见噪声元素
             noise_tags = [
                 'script', 'style', 'nav', 'footer', 'header', 'aside',
-                'iframe', 'noscript', 'meta', 'svg'
+                'noscript', 'meta', 'svg'
             ]
+            # 注意：这里不再删除iframe，以保留视频嵌入
             
             for tag in noise_tags:
                 for element in soup.find_all(tag):
@@ -440,6 +563,45 @@ class DataProcessor:
                 # 如果找不到主要内容区，则使用整个body
                 body = soup.find('body')
                 clean_html = str(body) if body else str(soup)
+            
+            # 添加媒体内容的引用（如果有）
+            if media:
+                media_html = '<div class="embedded-media-references">\n'
+                
+                if "youtube" in media:
+                    media_html += '<h3>内嵌YouTube视频：</h3>\n<ul>\n'
+                    for url in media["youtube"]:
+                        media_html += f'<li><a href="{url}" target="_blank">{url}</a></li>\n'
+                    media_html += '</ul>\n'
+                
+                if "twitter" in media:
+                    media_html += '<h3>内嵌Twitter内容：</h3>\n<ul>\n'
+                    for url in media["twitter"]:
+                        media_html += f'<li><a href="{url}" target="_blank">{url}</a></li>\n'
+                    media_html += '</ul>\n'
+                
+                if "vimeo" in media:
+                    media_html += '<h3>内嵌Vimeo视频：</h3>\n<ul>\n'
+                    for url in media["vimeo"]:
+                        media_html += f'<li><a href="{url}" target="_blank">{url}</a></li>\n'
+                    media_html += '</ul>\n'
+                
+                if "instagram" in media:
+                    media_html += '<h3>内嵌Instagram内容：</h3>\n<ul>\n'
+                    for url in media["instagram"]:
+                        media_html += f'<li><a href="{url}" target="_blank">{url}</a></li>\n'
+                    media_html += '</ul>\n'
+                
+                if "other_embedded" in media:
+                    media_html += '<h3>其他内嵌内容：</h3>\n<ul>\n'
+                    for url in media["other_embedded"]:
+                        media_html += f'<li><a href="{url}" target="_blank">{url}</a></li>\n'
+                    media_html += '</ul>\n'
+                
+                media_html += '</div>'
+                
+                # 将媒体引用添加到清洗后的HTML末尾
+                clean_html += media_html
             
             return clean_html
             
@@ -957,6 +1119,649 @@ class StorageManager:
         """
         return self.run_dir
 
+# ---------------------------
+# 都市传说判断算法模块
+# ---------------------------
+class UrbanLegendAnalyzer:
+    """都市传说分析器，用于检测和评估爬取内容中的都市传说"""
+    
+    def __init__(self):
+        """初始化都市传说分析器"""
+        # 默认阈值
+        self.thresholds = {
+            'confirmed_J': 1.8,
+            'suspect_J': 1.3,
+            'lag': 2.0,
+            # 内容特征阈值
+            'keyword_score': 0.7,
+            'credibility_score': 0.5
+        }
+    
+    def urban_legend_judge_seo(self, 
+                               theta_values, 
+                               y_values, 
+                               time_array, 
+                               seo_factor, 
+                               alpha_seo=0.5, 
+                               thresholds=None):
+        """
+        考虑 SEO 因素的都市传说识别函数
+        
+        参数：
+        ----------
+        theta_values : 1D array-like
+            议题热度序列
+        y_values : 1D array-like
+            反制信息强度序列
+        time_array : 1D array-like
+            时间序列，与上面两个序列一一对应
+        seo_factor : float
+            SEO 因子（越大越说明帖子在搜索引擎中的排名或曝光越高）
+        alpha_seo : float
+            SEO 放大系数，用于决定 SEO 对最终 J 值的影响
+        thresholds : dict
+            包含 'confirmed_J', 'suspect_J', 'lag' 等判定阈值
+        
+        返回：
+        ----------
+        label : str
+            "✅ 已确认都市传说" / "⚠️ 疑似都市传说" / "🟢 普通帖子"
+        details : dict
+            具体计算结果，用于后续分析
+        """
+
+        if thresholds is None:
+            thresholds = self.thresholds
+
+        theta_max = np.max(theta_values)
+        y_max = np.max(y_values)
+        epsilon = 1e-6
+        J = theta_max / (y_max + epsilon)
+        # SEO 修正后的传播指数
+        J_SEO = J * (1 + alpha_seo * seo_factor)
+
+        # 计算议题热度的局部峰值数量（简单方法）
+        num_peaks_theta = 0
+        for i in range(1, len(theta_values) - 1):
+            if theta_values[i] > theta_values[i-1] and theta_values[i] > theta_values[i+1]:
+                num_peaks_theta += 1
+
+        # 计算反制延迟：取最大值对应时间的差值
+        t_theta_max = time_array[np.argmax(theta_values)]
+        t_y_max = time_array[np.argmax(y_values)]
+        lag_time = abs(t_y_max - t_theta_max)
+
+        # 判断逻辑
+        label = "🟢 普通帖子"
+        if J_SEO > thresholds['confirmed_J'] and lag_time > thresholds['lag'] and num_peaks_theta >= 2:
+            label = "✅ 已确认都市传说"
+        elif J_SEO > thresholds['suspect_J'] and lag_time > thresholds['lag']:
+            label = "⚠️ 疑似都市传说"
+
+        details = {
+            'theta_max': theta_max,
+            'y_max': y_max,
+            'J_raw': J,
+            'J_SEO': J_SEO,
+            'seo_factor': seo_factor,
+            'num_peaks_theta': num_peaks_theta,
+            'lag_time': lag_time,
+            'thresholds': thresholds
+        }
+
+        return label, details
+    
+    def analyze_content(self, content, url, metadata=None):
+        """
+        分析爬取的内容是否为都市传说
+        
+        参数:
+            content: 网页内容文本
+            url: 网页URL
+            metadata: 元数据信息（可选）
+            
+        返回:
+            分析结果字典
+        """
+        if not content:
+            return {
+                'label': "🔄 无法分析",
+                'details': {"reason": "内容为空"},
+                'url': url,
+                'analysis_time': datetime.now().isoformat()
+            }
+            
+        try:
+            # 这里是简化的分析过程，实际应用中需要根据内容特征提取热度和反制信息
+            
+            # 基于内容长度和复杂度的简单估计
+            content_length = len(content)
+            # 字符数 / 1000 作为简单的SEO因子（越长的文章可能越受欢迎）
+            seo_factor = min(5.0, content_length / 1000)
+            
+            # 简单模拟热度和反制序列
+            # 在实际应用中，这些应该从历史数据中提取
+            t = np.linspace(0, 20, 100)
+            
+            # 使用内容指标构造合成的热度曲线
+            # 这里采用随机值+内容长度因素作为演示
+            # 实际应用应该基于真实的传播数据
+            noise = np.random.normal(0, 0.1, len(t))
+            theta_t = 1.0 + 0.5 * np.sin(t/2) + 0.3 * np.sin(t) + noise + (content_length / 50000)
+            
+            # 反制信息曲线，通常稍微滞后于热度曲线
+            y_t = 0.8 + 0.4 * np.sin((t-1.5)/2) + 0.2 * np.sin(t-1.5) + np.random.normal(0, 0.1, len(t))
+            
+            # 提取关键词特征
+            # 简单示例：检查一些常见的都市传说关键词
+            urban_legend_keywords = [
+                "震惊", "秘密", "不为人知", "揭秘", "惊人真相", "官方掩盖", 
+                "不会告诉你", "医生不会告诉你", "政府隐瞒", "阴谋论",
+                "绝密", "转发", "扩散", "注意"
+            ]
+            
+            keyword_count = sum(1 for keyword in urban_legend_keywords if keyword in content)
+            keyword_score = min(1.0, keyword_count / 5)  # 最多5个关键词就算满分
+            
+            # 调整SEO因子加入关键词得分
+            seo_factor = seo_factor * (1 + keyword_score)
+            
+            # 调用都市传说判断函数
+            label, details = self.urban_legend_judge_seo(theta_t, y_t, t, seo_factor)
+            
+            # 添加额外的内容分析指标
+            details.update({
+                'content_length': content_length,
+                'keyword_score': keyword_score,
+                'keyword_count': keyword_count,
+                'matched_keywords': [kw for kw in urban_legend_keywords if kw in content]
+            })
+            
+            # 构造最终结果
+            result = {
+                'label': label,
+                'details': details,
+                'url': url,
+                'analysis_time': datetime.now().isoformat()
+            }
+            
+            # 如果有元数据，加入一些关键元数据
+            if metadata:
+                result['metadata'] = {
+                    'title': metadata.get('title', ''),
+                    'keywords': metadata.get('keywords', []),
+                    'crawl_time': metadata.get('crawl_time', '')
+                }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"分析内容出错: {url}, 错误: {str(e)}")
+            return {
+                'label': "🔄 分析失败",
+                'details': {"error": str(e)},
+                'url': url,
+                'analysis_time': datetime.now().isoformat()
+            }
+    
+    def batch_analyze(self, content_list):
+        """
+        批量分析多个内容
+        
+        参数:
+            content_list: 内容列表，每项应包含content和url
+            
+        返回:
+            分析结果列表
+        """
+        results = []
+        
+        for item in content_list:
+            content = item.get('content', '')
+            url = item.get('url', '')
+            metadata = item.get('metadata', None)
+            
+            result = self.analyze_content(content, url, metadata)
+            results.append(result)
+            
+        return results
+
+class APIConnector:
+    """与后端API连接的类，用于上传爬虫结果和获取配置"""
+    
+    def __init__(self, api_base_url=None, api_key=None):
+        """
+        初始化API连接器
+        
+        参数:
+            api_base_url: API基础URL
+            api_key: API密钥（可选）
+        """
+        # 默认API地址
+        self.api_base_url = api_base_url or "https://api.holograplaplace.com"
+        self.api_key = api_key
+        self.session = requests.Session()
+        
+        # 如果有API密钥，添加到请求头
+        if self.api_key:
+            self.session.headers.update({
+                "Authorization": f"Bearer {self.api_key}"
+            })
+        
+        # 设置通用请求头
+        self.session.headers.update({
+            "Content-Type": "application/json",
+            "User-Agent": "HologramLaplace-Crawler/1.0"
+        })
+    
+    def get_configuration(self, config_id=None):
+        """
+        从服务器获取爬虫配置
+        
+        参数:
+            config_id: 配置ID（可选）
+            
+        返回:
+            配置字典
+        """
+        try:
+            # 如果提供了配置ID，获取特定配置
+            if config_id:
+                response = self.session.get(f"{self.api_base_url}/api/crawler/config/{config_id}")
+            else:
+                # 否则获取默认配置
+                response = self.session.get(f"{self.api_base_url}/api/crawler/config/default")
+                
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"获取配置失败: {str(e)}")
+            # 返回基本配置作为回退
+            return {
+                "urls": [],
+                "depth": 2,
+                "format": "html",
+                "concurrency": 3
+            }
+    
+    def upload_results(self, results, task_id=None):
+        """
+        上传爬取结果到服务器
+        
+        参数:
+            results: 爬取结果字典
+            task_id: 任务ID（可选）
+            
+        返回:
+            成功返回True，失败返回False
+        """
+        try:
+            # 准备上传数据
+            payload = {
+                "results": results,
+                "task_id": task_id,
+                "timestamp": datetime.now().isoformat(),
+                "client_info": {
+                    "version": "1.0",
+                    "platform": platform.system(),
+                    "python_version": platform.python_version()
+                }
+            }
+            
+            # 发送POST请求
+            response = self.session.post(
+                f"{self.api_base_url}/api/crawler/results",
+                json=payload
+            )
+            
+            response.raise_for_status()
+            result = response.json()
+            
+            logger.info(f"结果上传成功，服务器返回: {result}")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"上传结果失败: {str(e)}")
+            return False
+    
+    def get_media_info(self, media_url):
+        """
+        获取媒体内容的额外信息
+        
+        参数:
+            media_url: 媒体URL（YouTube、Twitter等）
+            
+        返回:
+            媒体信息字典
+        """
+        try:
+            # 准备请求数据
+            payload = {
+                "url": media_url
+            }
+            
+            # 发送请求
+            response = self.session.post(
+                f"{self.api_base_url}/api/media/info",
+                json=payload
+            )
+            
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"获取媒体信息失败: {str(e)}")
+            # 返回基本信息作为回退
+            media_type = "unknown"
+            if "youtube.com" in media_url or "youtu.be" in media_url:
+                media_type = "youtube"
+            elif "twitter.com" in media_url:
+                media_type = "twitter"
+            elif "vimeo.com" in media_url:
+                media_type = "vimeo"
+            elif "instagram.com" in media_url:
+                media_type = "instagram"
+                
+            return {
+                "url": media_url,
+                "type": media_type,
+                "title": None,
+                "thumbnail": None,
+                "author": None,
+                "publish_date": None
+            }
+    
+    def report_error(self, error_info):
+        """
+        向服务器报告错误
+        
+        参数:
+            error_info: 错误信息字典
+            
+        返回:
+            成功返回True，失败返回False
+        """
+        try:
+            # 准备错误信息
+            payload = {
+                "error": error_info,
+                "timestamp": datetime.now().isoformat(),
+                "client_info": {
+                    "version": "1.0",
+                    "platform": platform.system(),
+                    "python_version": platform.python_version()
+                }
+            }
+            
+            # 发送错误报告
+            response = self.session.post(
+                f"{self.api_base_url}/api/crawler/error",
+                json=payload
+            )
+            
+            response.raise_for_status()
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"报告错误失败: {str(e)}")
+            return False
+
+
+# 在main函数中添加API集成
+def main_with_api():
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='全息拉普拉斯互联网爬虫系统')
+    parser.add_argument('-c', '--config', type=str, default='crawler_config.json', help='配置文件路径')
+    parser.add_argument('-o', '--output', type=str, default='crawler_results.json', help='结果输出文件路径')
+    parser.add_argument('-v', '--verbose', action='store_true', help='输出详细日志')
+    parser.add_argument('-a', '--api', action='store_true', help='使用API获取配置并上传结果')
+    parser.add_argument('-u', '--api-url', type=str, help='API基础URL')
+    parser.add_argument('-k', '--api-key', type=str, help='API密钥')
+    parser.add_argument('-t', '--task-id', type=str, help='任务ID')
+    args = parser.parse_args()
+    
+    # 设置日志级别
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    
+    # 初始化API连接器（如果启用了API）
+    api = None
+    if args.api:
+        api = APIConnector(api_base_url=args.api_url, api_key=args.api_key)
+    
+    # 获取配置
+    config = None
+    if api and args.api:
+        # 从API获取配置
+        print("从API获取配置...")
+        config = api.get_configuration(args.task_id)
+        print(f"成功获取API配置，包含 {len(config.get('urls', []))} 个URL")
+    else:
+        # 从本地文件获取配置
+        try:
+            with open(args.config, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        except FileNotFoundError:
+            logger.error(f"配置文件不存在: {args.config}")
+            print(f"错误: 配置文件不存在: {args.config}")
+            print("请先从网页界面生成并下载配置文件")
+            return
+        except json.JSONDecodeError:
+            logger.error(f"配置文件格式错误: {args.config}")
+            print(f"错误: 配置文件格式错误: {args.config}")
+            return
+    
+    # 提取配置
+    urls = config.get('urls', [])
+    depth = config.get('depth', 2)
+    format_type = config.get('format', 'html')
+    concurrency = config.get('concurrency', 3)
+    
+    if not urls:
+        logger.error("配置中未找到有效URL")
+        print("错误: 配置中未找到有效URL")
+        return
+    
+    print(f"将爬取 {len(urls)} 个URL，深度为 {depth}，存储格式为 {format_type}")
+    
+    # 记录开始时间
+    start_time = time.time()
+    task_info = {
+        "start_time": start_time,
+        "urls": urls,
+        "depth": depth,
+        "format": format_type,
+        "concurrency": concurrency
+    }
+    
+    # 初始化爬虫、处理器和存储管理器
+    crawler = WebCrawler(max_workers=concurrency)
+    processor = DataProcessor()
+    storage = StorageManager(base_dir='./crawled_data')
+    
+    # 将运行目录记录到任务信息中
+    task_info["run_directory"] = storage.get_run_directory()
+    
+    try:
+        # 批量爬取
+        print("开始爬取...")
+        all_results = crawler.batch_crawl(urls, depth)
+        print(f"爬取完成，共获取 {len(all_results)} 个页面")
+        
+        # 处理结果
+        processed_content = []
+        
+        print("处理爬取内容...")
+        for url, data in all_results.items():
+            # 提取内容
+            title = data.get("title")
+            content = data.get("content")
+            html_content = data.get("html")
+            status = data.get("status")
+            
+            # 跳过无效内容
+            if not content and not html_content:
+                continue
+                
+            # 处理HTML内容
+            if html_content:
+                # 检查是否是PDF或其他特殊内容
+                if isinstance(html_content, str) and (html_content.startswith("PDF_CONTENT_") or 
+                                                     html_content.startswith("UNSUPPORTED_CONTENT_")):
+                    clean_content = content  # 使用parse_html生成的描述性内容
+                else:
+                    # 正常的HTML内容 - 注意这里传入了URL作为base_url
+                    clean_html = processor.clean_html(html_content, url)
+                    
+                    # 提取文本或格式化HTML
+                    if format_type == "txt":
+                        clean_content = processor.extract_text_from_html(clean_html)
+                    else:
+                        clean_content = clean_html
+                        
+                # 提取关键词（对于所有内容类型）
+                keywords = []
+                if content:
+                    keywords = processor.extract_keywords(content)
+                
+                # 存储内容
+                metadata = {
+                    "title": title or "无标题",
+                    "url": url,
+                    "depth": data.get("depth", 0),
+                    "crawl_time": datetime.now().isoformat(),
+                    "keywords": keywords,
+                    "content_type": "pdf" if isinstance(html_content, str) and html_content.startswith("PDF_CONTENT_") else "html"
+                }
+                
+                # 提取媒体内容信息
+                media = {}
+                if html_content and not isinstance(html_content, str) and not (html_content.startswith("PDF_CONTENT_") or html_content.startswith("UNSUPPORTED_CONTENT_")):
+                    media = extract_embedded_media(html_content, url)
+                    if media and api:
+                        # 获取媒体的额外信息
+                        for media_type, urls_list in media.items():
+                            for i, media_url in enumerate(urls_list):
+                                media_info = api.get_media_info(media_url)
+                                # 用更详细的信息替换原始URL
+                                media[media_type][i] = media_info
+                    
+                    # 将媒体信息添加到元数据
+                    if media:
+                        metadata["embedded_media"] = media
+                
+                file_path = storage.save_content(
+                    url, 
+                    clean_content, 
+                    format_type, 
+                    metadata
+                )
+                
+                # 构造处理后的内容对象
+                processed_item = {
+                    "url": url,
+                    "title": title or "无标题",
+                    "content": clean_content,
+                    "keywords": keywords,
+                    "file_path": file_path,
+                    "depth": data.get("depth", 0),
+                    "format": format_type,
+                    "status": status,
+                    "embedded_media": media if media else None
+                }
+                
+                processed_content.append(processed_item)
+        
+        # 内容分类
+        print("对内容进行分类...")
+        categorized_content = {}
+        if processed_content:
+            # 提取纯文本用于分类
+            text_contents = [item.get("content", "") for item in processed_content]
+            
+            # 确定分类数量
+            cluster_count = min(5, max(2, len(processed_content) // 3))
+            
+            # 执行分类
+            clusters = processor.classify_content(text_contents, cluster_count)
+            
+            # 整理分类结果
+            for cluster_id, indices in clusters.items():
+                category_items = [processed_content[idx] for idx in indices]
+                categorized_content[str(cluster_id)] = {
+                    "id": cluster_id,
+                    "items": category_items
+                }
+        
+        # 记录结束时间
+        end_time = time.time()
+        task_info["end_time"] = end_time
+        task_info["duration"] = end_time - start_time
+        
+        # 计算统计数据
+        statistics = calculate_statistics(all_results, processed_content, categorized_content, task_info)
+        
+        # 构造结果
+        result = {
+            "task_info": task_info,
+            "content": processed_content,
+            "categories": categorized_content,
+            "statistics": statistics
+        }
+        
+        # 保存结果到运行目录
+        result_path = os.path.join(storage.get_run_directory(), args.output)
+        with open(result_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+        
+        # 另外在当前目录下也保存一份结果
+        with open(args.output, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+        
+        # 如果启用了API，上传结果
+        if api and args.api:
+            print("上传结果到API...")
+            success = api.upload_results(result, args.task_id)
+            if success:
+                print("结果上传成功！")
+            else:
+                print("警告: 结果上传失败，请稍后手动上传或检查网络连接")
+        
+        print(f"爬取完成！结果已保存到:")
+        print(f" - {result_path}")
+        print(f" - {os.path.abspath(args.output)} (复制)")
+        print(f"数据文件保存在: {storage.get_run_directory()}")
+        print(f"总共爬取 {len(all_results)} 个页面，成功率 {statistics['successRate']}%")
+        print(f"用时 {task_info['duration']:.2f} 秒")
+        
+        if not (api and args.api):
+            print("请将结果文件上传到网页界面查看详细分析")
+        
+    except KeyboardInterrupt:
+        print("\n爬取被用户中断")
+        # 报告中断错误
+        if api and args.api:
+            api.report_error({
+                "type": "keyboard_interrupt",
+                "message": "用户中断爬取",
+                "task_id": args.task_id
+            })
+    except Exception as e:
+        logger.error(f"爬取过程出错: {str(e)}")
+        print(f"错误: {str(e)}")
+        # 报告其他错误
+        if api and args.api:
+            api.report_error({
+                "type": "exception",
+                "message": str(e),
+                "traceback": traceback.format_exc(),
+                "task_id": args.task_id
+            })
+    finally:
+        # 关闭资源
+        crawler.close()
+
 def calculate_statistics(all_results, processed_content, categorized_content, task_info):
     """
     计算统计数据
@@ -1198,5 +2003,276 @@ def main():
         # 关闭资源
         crawler.close()
 
+def main_with_urban_legend():
+    """集成都市传说分析功能的主函数"""
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='全息拉普拉斯互联网爬虫系统')
+    parser.add_argument('-c', '--config', type=str, default='crawler_config.json', help='配置文件路径')
+    parser.add_argument('-o', '--output', type=str, default='crawler_results.json', help='结果输出文件路径')
+    parser.add_argument('-v', '--verbose', action='store_true', help='输出详细日志')
+    parser.add_argument('-u', '--urban-legend', action='store_true', help='启用都市传说分析')
+    args = parser.parse_args()
+    
+    # 设置日志级别
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    
+    # 读取配置文件
+    try:
+        with open(args.config, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        logger.error(f"配置文件不存在: {args.config}")
+        print(f"错误: 配置文件不存在: {args.config}")
+        print("请先从网页界面生成并下载配置文件")
+        return
+    except json.JSONDecodeError:
+        logger.error(f"配置文件格式错误: {args.config}")
+        print(f"错误: 配置文件格式错误: {args.config}")
+        return
+    
+    # 提取配置
+    urls = config.get('urls', [])
+    depth = config.get('depth', 2)
+    format_type = config.get('format', 'html')
+    concurrency = config.get('concurrency', 3)
+    
+    if not urls:
+        logger.error("配置文件中未找到有效URL")
+        print("错误: 配置文件中未找到有效URL")
+        return
+    
+    print(f"将爬取 {len(urls)} 个URL，深度为 {depth}，存储格式为 {format_type}")
+    
+    # 如果启用都市传说分析，初始化分析器
+    urban_legend_analyzer = None
+    if args.urban_legend:
+        print("启用都市传说分析功能")
+        urban_legend_analyzer = UrbanLegendAnalyzer()
+    
+    # 记录开始时间
+    start_time = time.time()
+    task_info = {
+        "start_time": start_time,
+        "urls": urls,
+        "depth": depth,
+        "format": format_type,
+        "concurrency": concurrency,
+        "urban_legend_enabled": args.urban_legend
+    }
+    
+    # 初始化爬虫、处理器和存储管理器
+    crawler = WebCrawler(max_workers=concurrency)
+    processor = DataProcessor()
+    storage = StorageManager(base_dir='./crawled_data')
+    
+    # 将运行目录记录到任务信息中
+    task_info["run_directory"] = storage.get_run_directory()
+    
+    try:
+        # 批量爬取
+        print("开始爬取...")
+        all_results = crawler.batch_crawl(urls, depth)
+        print(f"爬取完成，共获取 {len(all_results)} 个页面")
+        
+        # 处理结果
+        processed_content = []
+        
+        print("处理爬取内容...")
+        for url, data in all_results.items():
+            # 提取内容
+            title = data.get("title")
+            content = data.get("content")
+            html_content = data.get("html")
+            status = data.get("status")
+            
+            # 跳过无效内容
+            if not content and not html_content:
+                continue
+                
+            # 处理HTML内容
+            if html_content:
+                # 检查是否是PDF或其他特殊内容
+                if isinstance(html_content, str) and (html_content.startswith("PDF_CONTENT_") or 
+                                                     html_content.startswith("UNSUPPORTED_CONTENT_")):
+                    clean_content = content  # 使用parse_html生成的描述性内容
+                else:
+                    # 正常的HTML内容 - 注意这里传入了URL作为base_url
+                    clean_html = processor.clean_html(html_content, url)
+                    
+                    # 提取文本或格式化HTML
+                    if format_type == "txt":
+                        clean_content = processor.extract_text_from_html(clean_html)
+                    else:
+                        clean_content = clean_html
+                        
+                # 提取关键词（对于所有内容类型）
+                keywords = []
+                if content:
+                    keywords = processor.extract_keywords(content)
+                
+                # 提取媒体内容信息
+                media = {}
+                if html_content and not isinstance(html_content, str) and not (html_content.startswith("PDF_CONTENT_") or html_content.startswith("UNSUPPORTED_CONTENT_")):
+                    media = extract_embedded_media(html_content, url)
+                
+                # 都市传说分析（如果启用）
+                urban_legend_result = None
+                if args.urban_legend and urban_legend_analyzer and clean_content:
+                    metadata = {
+                        'title': title,
+                        'keywords': keywords,
+                        'crawl_time': datetime.now().isoformat()
+                    }
+                    urban_legend_result = urban_legend_analyzer.analyze_content(clean_content, url, metadata)
+                    logger.info(f"都市传说分析结果 {url}: {urban_legend_result['label']}")
+                
+                # 存储内容
+                metadata = {
+                    "title": title or "无标题",
+                    "url": url,
+                    "depth": data.get("depth", 0),
+                    "crawl_time": datetime.now().isoformat(),
+                    "keywords": keywords,
+                    "content_type": "pdf" if isinstance(html_content, str) and html_content.startswith("PDF_CONTENT_") else "html"
+                }
+                
+                # 将媒体信息添加到元数据
+                if media:
+                    metadata["embedded_media"] = media
+                    
+                # 将都市传说分析结果添加到元数据
+                if urban_legend_result:
+                    metadata["urban_legend"] = urban_legend_result
+                
+                file_path = storage.save_content(
+                    url, 
+                    clean_content, 
+                    format_type, 
+                    metadata
+                )
+                
+                # 构造处理后的内容对象
+                processed_item = {
+                    "url": url,
+                    "title": title or "无标题",
+                    "content": clean_content,
+                    "keywords": keywords,
+                    "file_path": file_path,
+                    "depth": data.get("depth", 0),
+                    "format": format_type,
+                    "status": status,
+                    "embedded_media": media if media else None
+                }
+                
+                # 添加都市传说分析结果
+                if urban_legend_result:
+                    processed_item["urban_legend"] = urban_legend_result
+                
+                processed_content.append(processed_item)
+        
+        # 内容分类
+        print("对内容进行分类...")
+        categorized_content = {}
+        if processed_content:
+            # 提取纯文本用于分类
+            text_contents = [item.get("content", "") for item in processed_content]
+            
+            # 确定分类数量
+            cluster_count = min(5, max(2, len(processed_content) // 3))
+            
+            # 执行分类
+            clusters = processor.classify_content(text_contents, cluster_count)
+            
+            # 整理分类结果
+            for cluster_id, indices in clusters.items():
+                category_items = [processed_content[idx] for idx in indices]
+                categorized_content[str(cluster_id)] = {
+                    "id": cluster_id,
+                    "items": category_items
+                }
+        
+        # 记录结束时间
+        end_time = time.time()
+        task_info["end_time"] = end_time
+        task_info["duration"] = end_time - start_time
+        
+        # 计算统计数据
+        statistics = calculate_statistics(all_results, processed_content, categorized_content, task_info)
+        
+        # 如果启用了都市传说分析，添加相关统计
+        if args.urban_legend and urban_legend_analyzer:
+            urban_legend_stats = {
+                "confirmed_count": 0,
+                "suspect_count": 0,
+                "normal_count": 0,
+                "failed_count": 0
+            }
+            
+            for item in processed_content:
+                if "urban_legend" in item:
+                    label = item["urban_legend"]["label"]
+                    if "已确认都市传说" in label:
+                        urban_legend_stats["confirmed_count"] += 1
+                    elif "疑似都市传说" in label:
+                        urban_legend_stats["suspect_count"] += 1
+                    elif "普通帖子" in label:
+                        urban_legend_stats["normal_count"] += 1
+                    else:
+                        urban_legend_stats["failed_count"] += 1
+            
+            statistics["urban_legend"] = urban_legend_stats
+        
+        # 构造结果
+        result = {
+            "task_info": task_info,
+            "content": processed_content,
+            "categories": categorized_content,
+            "statistics": statistics
+        }
+        
+        # 保存结果 (将结果也保存到运行目录下)
+        result_path = os.path.join(storage.get_run_directory(), args.output)
+        with open(result_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+        
+        # 另外在当前目录下也保存一份结果，这样用户仍然可以在当前目录找到最新的结果
+        with open(args.output, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+        
+        print(f"爬取完成！结果已保存到:")
+        print(f" - {result_path}")
+        print(f" - {os.path.abspath(args.output)} (复制)")
+        print(f"数据文件保存在: {storage.get_run_directory()}")
+        print(f"总共爬取 {len(all_results)} 个页面，成功率 {statistics['successRate']}%")
+        print(f"用时 {task_info['duration']:.2f} 秒")
+        
+        # 如果启用了都市传说分析，显示分析结果统计
+        if args.urban_legend and "urban_legend" in statistics:
+            ul_stats = statistics["urban_legend"]
+            print("\n都市传说分析结果:")
+            print(f" - 已确认都市传说: {ul_stats['confirmed_count']} 篇")
+            print(f" - 疑似都市传说: {ul_stats['suspect_count']} 篇")
+            print(f" - 普通内容: {ul_stats['normal_count']} 篇")
+            if ul_stats['failed_count'] > 0:
+                print(f" - 分析失败: {ul_stats['failed_count']} 篇")
+        
+        print("请将结果文件上传到网页界面查看详细分析")
+        
+    except KeyboardInterrupt:
+        print("\n爬取被用户中断")
+    except Exception as e:
+        logger.error(f"爬取过程出错: {str(e)}")
+        print(f"错误: {str(e)}")
+    finally:
+        # 关闭资源
+        crawler.close()
+
+# 在文件末尾添加调用
 if __name__ == "__main__":
-    main()
+    # 如果需要启用API功能，取消下面一行的注释并注释掉main()调用
+    # main_with_api()
+    # 要使用带都市传说分析的版本，取消下面一行的注释，并注释掉上面的main()调用
+    main_with_urban_legend()
+
+    #main()
