@@ -162,10 +162,16 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log("处理爬虫结果:", results);  // 添加调试输出
         
+        // 确保阴谋论标签页存在
+        addConspiracyTab();
+        
         // 处理URL列表
         if (results.content && Array.isArray(results.content)) {
             console.log("发现内容数组，长度:", results.content.length);
             renderUrlList(results.content);
+            
+            // 处理阴谋论检测内容
+            renderConspiracyList(results.content);
         } else {
             console.error("内容数组不存在或格式错误:", results.content);
             if (urlListElement) {
@@ -251,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 渲染内容预览
+    // 修改渲染内容预览函数，添加阴谋论检测信息展示
     function renderContentPreview(item) {
         if (!contentPreview) {
             console.error("内容预览元素未找到!");
@@ -264,6 +270,74 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         console.log("渲染内容:", item.title, "内容长度:", item.content ? item.content.length : 0);
+        console.log("阴谋论检测信息:", item.urban_legend);
+        
+        // 构建阴谋论检测信息HTML
+        let urbanLegendHtml = '';
+        if (item.urban_legend) {
+            const legend = item.urban_legend;
+            let statusClass = '';
+            let statusIcon = '';
+            
+            // 根据检测结果设置不同的样式
+            if (legend.label.includes('已确认')) {
+                statusClass = 'conspiracy-confirmed';
+                statusIcon = '<i class="bi bi-exclamation-triangle-fill"></i>';
+            } else if (legend.label.includes('疑似')) {
+                statusClass = 'conspiracy-suspect';
+                statusIcon = '<i class="bi bi-question-circle-fill"></i>';
+            } else {
+                statusClass = 'conspiracy-normal';
+                statusIcon = '<i class="bi bi-check-circle-fill"></i>';
+            }
+            
+            urbanLegendHtml = `
+                <div class="urban-legend-info ${statusClass}">
+                    <div class="urban-legend-header">
+                        ${statusIcon} ${legend.label}
+                    </div>
+                    <div class="urban-legend-details">
+                        <div class="details-row">
+                            <span class="details-label">分析时间:</span>
+                            <span class="details-value">${legend.analysis_time || '未知'}</span>
+                        </div>
+                        <div class="details-row">
+                            <span class="details-label">J值 (原始):</span>
+                            <span class="details-value">${legend.details ? legend.details.J_raw.toFixed(4) : '未知'}</span>
+                        </div>
+                        <div class="details-row">
+                            <span class="details-label">J值 (SEO):</span>
+                            <span class="details-value">${legend.details ? legend.details.J_SEO.toFixed(4) : '未知'}</span>
+                        </div>
+                        <div class="details-row">
+                            <span class="details-label">滞后时间:</span>
+                            <span class="details-value">${legend.details ? legend.details.lag_time.toFixed(2) : '未知'} 秒</span>
+                        </div>
+                        <div class="details-row">
+                            <span class="details-label">θ峰值数量:</span>
+                            <span class="details-value">${legend.details ? legend.details.num_peaks_theta : '未知'}</span>
+                        </div>
+                    </div>
+                    <div class="urban-legend-thresholds">
+                        <div class="threshold-title">判定阈值:</div>
+                        <div class="threshold-row">
+                            <span class="threshold-label">已确认阈值:</span>
+                            <span class="threshold-value">${legend.details && legend.details.thresholds ? legend.details.thresholds.confirmed_J : '未知'}</span>
+                        </div>
+                        <div class="threshold-row">
+                            <span class="threshold-label">疑似阈值:</span>
+                            <span class="threshold-value">${legend.details && legend.details.thresholds ? legend.details.thresholds.suspect_J : '未知'}</span>
+                        </div>
+                        <div class="threshold-row">
+                            <span class="threshold-label">滞后阈值:</span>
+                            <span class="threshold-value">${legend.details && legend.details.thresholds ? legend.details.thresholds.lag : '未知'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            urbanLegendHtml = '<div class="urban-legend-none">无阴谋论检测信息</div>';
+        }
         
         const div = document.createElement('div');
         div.innerHTML = `
@@ -272,6 +346,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="url-info">URL: <a href="${item.url}" target="_blank">${item.url}</a></div>
                 <div class="status-info">状态: ${item.status || '未知'}</div>
             </div>
+            
+            ${urbanLegendHtml}
+            
             <div class="content-body">
                 ${item.content && item.content.includes('<') ? 
                     // HTML内容
@@ -379,7 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
         categoryContent.appendChild(div);
     }
     
-    // 渲染统计信息
+    // 修改处理爬虫结果的统计信息部分，添加阴谋论统计
     function renderStatistics(stats) {
         if (!statisticsContent) {
             console.error("统计内容元素未找到!");
@@ -389,6 +466,36 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!stats) {
             statisticsContent.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">无统计信息</p></div>';
             return;
+        }
+        
+        // 构建阴谋论统计HTML
+        let urbanLegendStatsHtml = '';
+        if (stats.urban_legend) {
+            urbanLegendStatsHtml = `
+                <div class="stats-card">
+                    <div class="stats-title">阴谋论检测统计</div>
+                    <div class="stats-row">
+                        <div class="stats-label">已确认阴谋论:</div>
+                        <div class="stats-value conspiracy-confirmed-text">${stats.urban_legend.confirmed_count || 0}</div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stats-label">疑似阴谋论:</div>
+                        <div class="stats-value conspiracy-suspect-text">${stats.urban_legend.suspect_count || 0}</div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stats-label">正常内容:</div>
+                        <div class="stats-value conspiracy-normal-text">${stats.urban_legend.normal_count || 0}</div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stats-label">检测失败:</div>
+                        <div class="stats-value">${stats.urban_legend.failed_count || 0}</div>
+                    </div>
+                    <div class="stats-row conspiracy-percentage">
+                        <div class="stats-label">阴谋论比例:</div>
+                        <div class="stats-value">${((stats.urban_legend.confirmed_count + stats.urban_legend.suspect_count) / stats.totalUrls * 100).toFixed(2)}%</div>
+                    </div>
+                </div>
+            `;
         }
         
         const div = document.createElement('div');
@@ -414,6 +521,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
             
+            ${urbanLegendStatsHtml}
+            
             <div class="stats-card">
                 <div class="stats-title">HTTP状态统计</div>
                 ${Object.entries(stats.statusCounts || {}).map(([status, count]) => `
@@ -437,6 +546,457 @@ document.addEventListener('DOMContentLoaded', function() {
         
         statisticsContent.innerHTML = '';
         statisticsContent.appendChild(div);
+        
+        // 添加阴谋论统计图表
+        if (stats.urban_legend) {
+            setTimeout(() => {
+                renderConspiracyChart(stats.urban_legend);
+            }, 100);
+        }
+    }
+    
+    // 添加阴谋论统计图表
+    function renderConspiracyChart(urbanLegendStats) {
+        // 创建图表容器
+        const chartContainer = document.createElement('div');
+        chartContainer.className = 'stats-card';
+        chartContainer.innerHTML = `
+            <div class="stats-title">阴谋论检测分布</div>
+            <canvas id="conspiracyChart" width="400" height="200"></canvas>
+        `;
+        
+        statisticsContent.appendChild(chartContainer);
+        
+        // 使用Chart.js绘制饼图
+        // 注意：需要在HTML中引入Chart.js库
+        if (typeof Chart !== 'undefined') {
+            const ctx = document.getElementById('conspiracyChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['已确认阴谋论', '疑似阴谋论', '正常内容', '检测失败'],
+                    datasets: [{
+                        data: [
+                            urbanLegendStats.confirmed_count || 0,
+                            urbanLegendStats.suspect_count || 0,
+                            urbanLegendStats.normal_count || 0,
+                            urbanLegendStats.failed_count || 0
+                        ],
+                        backgroundColor: [
+                            '#dc3545', // 红色 - 已确认
+                            '#ffc107', // 黄色 - 疑似
+                            '#28a745', // 绿色 - 正常
+                            '#6c757d'  // 灰色 - 失败
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            });
+        } else {
+            console.error("Chart.js 未找到，无法绘制图表");
+            document.getElementById('conspiracyChart').parentElement.innerHTML = '<div class="text-muted">需要Chart.js支持才能显示图表</div>';
+        }
+    }
+    
+    // 添加阴谋论标签页
+    function addConspiracyTab() {
+        // 检查是否已存在该标签页
+        if (document.getElementById('conspiracy-tab')) return;
+        
+        // 创建标签页导航项
+        const tabItem = document.createElement('li');
+        tabItem.className = 'nav-item';
+        tabItem.innerHTML = `<a class="nav-link" id="conspiracy-tab" data-bs-toggle="tab" href="#conspiracy">阴谋论检测</a>`;
+        
+        // 添加到标签页导航
+        const resultTabs = document.getElementById('resultTabs');
+        if (resultTabs) {
+            // 插入到统计标签页之前
+            const statsTab = document.getElementById('stats-tab');
+            const statsTabParent = statsTab.parentNode;
+            statsTabParent.insertBefore(tabItem, statsTab);
+        }
+        
+        // 创建标签页内容区域
+        const tabContent = document.createElement('div');
+        tabContent.className = 'tab-pane fade';
+        tabContent.id = 'conspiracy';
+        tabContent.innerHTML = `
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="list-group" id="conspiracyList">
+                        <div class="empty-message text-center py-5">
+                            <p class="text-muted">请先上传爬虫结果文件</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div id="conspiracyContent">
+                        <div class="empty-message text-center py-5">
+                            <p class="text-muted">选择左侧项目查看检测结果</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 添加到标签页内容区
+        const tabContainer = document.querySelector('.tab-content');
+        if (tabContainer) {
+            const statsPane = document.getElementById('stats');
+            tabContainer.insertBefore(tabContent, statsPane);
+        }
+    }
+    
+    // 渲染阴谋论检测列表
+    function renderConspiracyList(contentList) {
+        const conspiracyList = document.getElementById('conspiracyList');
+        if (!conspiracyList) {
+            console.error("阴谋论列表元素未找到!");
+            return;
+        }
+        
+        conspiracyList.innerHTML = '';
+        
+        if (contentList.length === 0) {
+            conspiracyList.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">没有检测内容</p></div>';
+            return;
+        }
+        
+        // 过滤有阴谋论检测信息的内容并分类
+        const confirmedList = [];
+        const suspectList = [];
+        const normalList = [];
+        
+        contentList.forEach((item, index) => {
+            if (item.urban_legend) {
+                const label = item.urban_legend.label;
+                if (label.includes('已确认')) {
+                    confirmedList.push({item, index});
+                } else if (label.includes('疑似')) {
+                    suspectList.push({item, index});
+                } else {
+                    normalList.push({item, index});
+                }
+            }
+        });
+        
+        // 添加分组标题：已确认阴谋论
+        if (confirmedList.length > 0) {
+            const confirmedHeader = document.createElement('div');
+            confirmedHeader.className = 'list-group-item conspiracy-group-header conspiracy-confirmed';
+            confirmedHeader.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> 已确认阴谋论 (${confirmedList.length})`;
+            conspiracyList.appendChild(confirmedHeader);
+            
+            // 添加已确认阴谋论项目
+            confirmedList.forEach(({item, index}) => {
+                addConspiracyListItem(conspiracyList, item, index, 'conspiracy-confirmed');
+            });
+        }
+        
+        // 添加分组标题：疑似阴谋论
+        if (suspectList.length > 0) {
+            const suspectHeader = document.createElement('div');
+            suspectHeader.className = 'list-group-item conspiracy-group-header conspiracy-suspect';
+            suspectHeader.innerHTML = `<i class="bi bi-question-circle-fill"></i> 疑似阴谋论 (${suspectList.length})`;
+            conspiracyList.appendChild(suspectHeader);
+            
+            // 添加疑似阴谋论项目
+            suspectList.forEach(({item, index}) => {
+                addConspiracyListItem(conspiracyList, item, index, 'conspiracy-suspect');
+            });
+        }
+        
+        // 添加分组标题：正常内容
+        if (normalList.length > 0) {
+            const normalHeader = document.createElement('div');
+            normalHeader.className = 'list-group-item conspiracy-group-header conspiracy-normal';
+            normalHeader.innerHTML = `<i class="bi bi-check-circle-fill"></i> 正常内容 (${normalList.length})`;
+            conspiracyList.appendChild(normalHeader);
+            
+            // 添加正常内容项目
+            normalList.forEach(({item, index}) => {
+                addConspiracyListItem(conspiracyList, item, index, 'conspiracy-normal');
+            });
+        }
+        
+        // 如果没有任何检测结果
+        if (confirmedList.length === 0 && suspectList.length === 0 && normalList.length === 0) {
+            conspiracyList.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">没有阴谋论检测结果</p></div>';
+        }
+    }
+    
+    // 添加阴谋论列表项
+    function addConspiracyListItem(container, item, index, className) {
+        const div = document.createElement('div');
+        div.className = `list-group-item conspiracy-item ${className}`;
+        div.dataset.index = index;
+        
+        div.innerHTML = `
+            <div class="conspiracy-item-title">${item.title || '无标题'}</div>
+            <div class="conspiracy-item-url">${item.url}</div>
+            <div class="conspiracy-item-score">
+                J值: ${item.urban_legend.details ? item.urban_legend.details.J_raw.toFixed(4) : 'N/A'}
+            </div>
+        `;
+        
+        div.addEventListener('click', function() {
+            // 移除所有active类
+            document.querySelectorAll('.conspiracy-item').forEach(el => {
+                el.classList.remove('active');
+            });
+            
+            // 添加active类到当前项
+            div.classList.add('active');
+            
+            // 显示详细检测结果
+            renderConspiracyDetail(item);
+        });
+        
+        container.appendChild(div);
+    }
+    
+    // 渲染阴谋论详细信息
+    function renderConspiracyDetail(item) {
+        const conspiracyContent = document.getElementById('conspiracyContent');
+        if (!conspiracyContent) {
+            console.error("阴谋论详情元素未找到!");
+            return;
+        }
+        
+        if (!item || !item.urban_legend) {
+            conspiracyContent.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">无检测信息</p></div>';
+            return;
+        }
+        
+        const legend = item.urban_legend;
+        let statusClass = '';
+        let statusText = '';
+        
+        // 根据检测结果设置不同的样式和文本
+        if (legend.label.includes('已确认')) {
+            statusClass = 'conspiracy-confirmed';
+            statusText = '已确认阴谋论';
+        } else if (legend.label.includes('疑似')) {
+            statusClass = 'conspiracy-suspect';
+            statusText = '疑似阴谋论';
+        } else {
+            statusClass = 'conspiracy-normal';
+            statusText = '正常内容';
+        }
+        
+        // 创建详情HTML
+        const div = document.createElement('div');
+        div.className = 'conspiracy-detail';
+        div.innerHTML = `
+            <div class="conspiracy-detail-header ${statusClass}">
+                <h4>${statusText}</h4>
+                <div class="conspiracy-detail-title">${item.title || '无标题'}</div>
+                <div class="conspiracy-detail-url">
+                    <a href="${item.url}" target="_blank">${item.url}</a>
+                </div>
+            </div>
+            
+            <div class="conspiracy-detail-body">
+                <div class="conspiracy-metrics">
+                    <h5>检测指标</h5>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-label">J值 (原始)</div>
+                            <div class="metric-value ${getValueClass(legend.details.J_raw, legend.details.thresholds.confirmed_J, legend.details.thresholds.suspect_J)}">
+                                ${legend.details.J_raw.toFixed(4)}
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">J值 (SEO)</div>
+                            <div class="metric-value">
+                                ${legend.details.J_SEO.toFixed(4)}
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">滞后时间</div>
+                            <div class="metric-value ${legend.details.lag_time > legend.details.thresholds.lag ? 'value-warning' : ''}">
+                                ${legend.details.lag_time.toFixed(2)} 秒
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">θ峰值数量</div>
+                            <div class="metric-value">
+                                ${legend.details.num_peaks_theta}
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">θ最大值</div>
+                            <div class="metric-value">
+                                ${legend.details.theta_max.toFixed(4)}
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">y最大值</div>
+                            <div class="metric-value">
+                                ${legend.details.y_max.toFixed(4)}
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">SEO因子</div>
+                            <div class="metric-value">
+                                ${legend.details.seo_factor.toFixed(2)}
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">内容长度</div>
+                            <div class="metric-value">
+                                ${legend.details.content_length} 字符
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="conspiracy-thresholds">
+                    <h5>判定阈值</h5>
+                    <div class="thresholds-grid">
+                        <div class="threshold-item">
+                            <div class="threshold-label">已确认阈值 (J)</div>
+                            <div class="threshold-value">${legend.details.thresholds.confirmed_J}</div>
+                        </div>
+                        <div class="threshold-item">
+                            <div class="threshold-label">疑似阈值 (J)</div>
+                            <div class="threshold-value">${legend.details.thresholds.suspect_J}</div>
+                        </div>
+                        <div class="threshold-item">
+                            <div class="threshold-label">滞后阈值</div>
+                            <div class="threshold-value">${legend.details.thresholds.lag} 秒</div>
+                        </div>
+                        <div class="threshold-item">
+                            <div class="threshold-label">关键词分数阈值</div>
+                            <div class="threshold-value">${legend.details.thresholds.keyword_score}</div>
+                        </div>
+                        <div class="threshold-item">
+                            <div class="threshold-label">可信度分数阈值</div>
+                            <div class="threshold-value">${legend.details.thresholds.credibility_score}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="conspiracy-keywords">
+                    <h5>关键词分析</h5>
+                    <div class="keyword-stats">
+                        <div class="keyword-stat-item">
+                            <div class="keyword-stat-label">关键词分数</div>
+                            <div class="keyword-stat-value">${legend.details.keyword_score}</div>
+                        </div>
+                        <div class="keyword-stat-item">
+                            <div class="keyword-stat-label">关键词数量</div>
+                            <div class="keyword-stat-value">${legend.details.keyword_count}</div>
+                        </div>
+                    </div>
+                    <div class="keyword-list">
+                        ${legend.details.matched_keywords && legend.details.matched_keywords.length > 0 ? 
+                            legend.details.matched_keywords.map(kw => `<span class="keyword">${kw}</span>`).join('') : 
+                            '<span class="text-muted">无匹配关键词</span>'}
+                    </div>
+                </div>
+                
+                <div class="conspiracy-analysis-info">
+                    <div class="analysis-time">分析时间: ${legend.analysis_time}</div>
+                    <div class="analysis-url">分析URL: ${legend.url}</div>
+                </div>
+            </div>
+        `;
+        
+        conspiracyContent.innerHTML = '';
+        conspiracyContent.appendChild(div);
+        
+        // 添加检测图表
+        setTimeout(() => {
+            renderConspiracyDetailChart(legend.details, conspiracyContent);
+        }, 100);
+    }
+    
+    // 获取值的样式类
+    function getValueClass(value, confirmedThreshold, suspectThreshold) {
+        if (value >= confirmedThreshold) return 'value-danger';
+        if (value >= suspectThreshold) return 'value-warning';
+        return 'value-normal';
+    }
+    
+    // 渲染阴谋论检测详情图表
+    function renderConspiracyDetailChart(details, container) {
+        if (!details) return;
+        
+        // 创建图表容器
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'conspiracy-chart-container';
+        chartDiv.innerHTML = `
+            <h5>检测指标可视化</h5>
+            <canvas id="conspiracyDetailChart" width="400" height="200"></canvas>
+        `;
+        
+        container.appendChild(chartDiv);
+        
+        // 使用Chart.js绘制雷达图
+        if (typeof Chart !== 'undefined') {
+            const ctx = document.getElementById('conspiracyDetailChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['J值 (原始)', 'J值 (SEO)', '滞后时间', 'θ峰值数量', 'θ最大值', 'y最大值'],
+                    datasets: [{
+                        label: '当前值',
+                        data: [
+                            details.J_raw,
+                            details.J_SEO,
+                            details.lag_time,
+                            details.num_peaks_theta,
+                            details.theta_max,
+                            details.y_max
+                        ],
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgb(54, 162, 235)',
+                        pointBackgroundColor: 'rgb(54, 162, 235)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(54, 162, 235)'
+                    }, {
+                        label: '阈值标准',
+                        data: [
+                            details.thresholds.confirmed_J,
+                            details.thresholds.confirmed_J * 3.5, // SEO阈值估算
+                            details.thresholds.lag,
+                            25, // 峰值数量参考值
+                            2.2, // θ最大值参考值
+                            1.5  // y最大值参考值
+                        ],
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: 'rgb(255, 99, 132)',
+                        pointBackgroundColor: 'rgb(255, 99, 132)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(255, 99, 132)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    elements: {
+                        line: {
+                            borderWidth: 3
+                        }
+                    },
+                    scale: {
+                        ticks: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
     }
     
     // 添加启动时的调试信息
