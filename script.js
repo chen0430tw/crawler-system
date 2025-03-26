@@ -557,21 +557,35 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 添加阴谋论统计图表
     function renderConspiracyChart(urbanLegendStats) {
+        // 先检查是否已存在图表容器，如果存在则移除
+        const existingChart = document.getElementById('conspiracyChartContainer');
+        if (existingChart) {
+            existingChart.remove();
+        }
+        
         // 创建图表容器
         const chartContainer = document.createElement('div');
         chartContainer.className = 'stats-card';
+        chartContainer.id = 'conspiracyChartContainer'; // 添加ID以便后续检查
         chartContainer.innerHTML = `
             <div class="stats-title">阴谋论检测分布</div>
-            <canvas id="conspiracyChart" width="400" height="200"></canvas>
+            <div style="height: 300px; position: relative;">
+                <canvas id="conspiracyChart"></canvas>
+            </div>
         `;
         
         statisticsContent.appendChild(chartContainer);
         
         // 使用Chart.js绘制饼图
-        // 注意：需要在HTML中引入Chart.js库
         if (typeof Chart !== 'undefined') {
             const ctx = document.getElementById('conspiracyChart').getContext('2d');
-            new Chart(ctx, {
+            
+            // 检查是否已存在Chart实例，如果存在则销毁
+            if (window.conspiracyPieChart instanceof Chart) {
+                window.conspiracyPieChart.destroy();
+            }
+            
+            window.conspiracyPieChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
                     labels: ['已确认阴谋论', '疑似阴谋论', '正常内容', '检测失败'],
@@ -593,14 +607,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    legend: {
-                        position: 'right'
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        },
+                        title: {
+                            display: false
+                        }
                     }
                 }
             });
         } else {
             console.error("Chart.js 未找到，无法绘制图表");
-            document.getElementById('conspiracyChart').parentElement.innerHTML = '<div class="text-muted">需要Chart.js支持才能显示图表</div>';
+            document.getElementById('conspiracyChartContainer').innerHTML = '<div class="text-muted">需要Chart.js支持才能显示图表</div>';
         }
     }
     
@@ -930,12 +949,19 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderConspiracyDetailChart(details, container) {
         if (!details) return;
         
+        // 检查是否已存在图表容器，如果存在则移除
+        const existingChart = document.getElementById('conspiracyDetailChartContainer');
+        if (existingChart) {
+            existingChart.remove();
+        }
+        
         // 创建图表容器
         const chartDiv = document.createElement('div');
         chartDiv.className = 'conspiracy-chart-container';
+        chartDiv.id = 'conspiracyDetailChartContainer'; // 添加ID以便后续检查
         chartDiv.innerHTML = `
             <h5>检测指标可视化</h5>
-            <canvas id="conspiracyDetailChart" width="400" height="200"></canvas>
+            <canvas id="conspiracyDetailChart"></canvas>
         `;
         
         container.appendChild(chartDiv);
@@ -943,7 +969,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // 使用Chart.js绘制雷达图
         if (typeof Chart !== 'undefined') {
             const ctx = document.getElementById('conspiracyDetailChart').getContext('2d');
-            new Chart(ctx, {
+            
+            // 检查是否已存在Chart实例，如果存在则销毁
+            if (window.conspiracyRadarChart instanceof Chart) {
+                window.conspiracyRadarChart.destroy();
+            }
+            
+            window.conspiracyRadarChart = new Chart(ctx, {
                 type: 'radar',
                 data: {
                     labels: ['J值 (原始)', 'J值 (SEO)', '滞后时间', 'θ峰值数量', 'θ最大值', 'y最大值'],
@@ -987,11 +1019,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     elements: {
                         line: {
                             borderWidth: 3
-                        }
-                    },
-                    scale: {
-                        ticks: {
-                            beginAtZero: true
                         }
                     }
                 }
