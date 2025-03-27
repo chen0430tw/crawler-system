@@ -1038,9 +1038,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="stats-title">起始爬取地址</div>
                     <div class="initial-urls-list">
                         ${initialUrls.map((url, index) => `
-                            <div class="stats-row">
-                                <div class="stats-label">${index + 1}:</div>
-                                <div class="stats-value initial-url">${url}</div>
+                            <div class="stats-row url-row">
+                                <div class="url-number">${index + 1}</div>
+                                <div class="initial-url">${url}</div>
                             </div>
                         `).join('')}
                     </div>

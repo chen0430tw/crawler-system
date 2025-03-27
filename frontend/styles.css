@@ -659,17 +659,51 @@ pre {
     font-weight: bold;
 }
 
-/* 起始URL列表样式 */
+/* 优化起始URL列表样式 */
 .initial-urls-list {
     max-height: 200px;
     overflow-y: auto;
     margin-top: 5px;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+}
+
+.stats-row.url-row {
+    display: flex;
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e5e5;
+    align-items: flex-start;
+}
+
+.stats-row.url-row:last-child {
+    border-bottom: none;
+}
+
+.stats-row.url-row:hover {
+    background-color: #f0f0f0;
+}
+
+.url-number {
+    flex: 0 0 24px;
+    font-size: 0.85rem;
+    color: #666;
+    text-align: center;
+    background-color: #e9ecef;
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin-right: 8px;
+    font-weight: bold;
+    height: 22px;
+    line-height: 18px;
 }
 
 .initial-url {
     word-break: break-all;
     font-family: monospace;
     font-size: 0.9rem;
+    flex: 1;
+    padding: 2px 0;
+    color: #0066cc;
 }
 
 /* 可选：添加一个显示所有URL的展开/折叠功能 */
