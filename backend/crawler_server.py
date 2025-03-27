@@ -62,6 +62,22 @@ TASK_STATUS = {
     'FAILED': '失败'
 }
 
+# 添加静态文件服务
+@app.route('/')
+def serve_index():
+    return send_from_directory('../frontend', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    if path.startswith('api/') or path == 'health':
+        # 跳过API路由
+        return {"error": "Not found"}, 404
+    try:
+        return send_from_directory('../frontend', path)
+    except:
+        # 如果文件不存在，返回index.html（用于SPA路由）
+        return send_from_directory('../frontend', 'index.html')
+
 def allowed_file(filename):
     """检查文件扩展名是否允许"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'json', 'txt'}
