@@ -610,10 +610,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     plugins: {
                         legend: {
                             position: 'right'
-                            align: 'center' // 让图例居中对齐
-                        },
-                        title: {
-                            display: false
                         }
                     }
                 }
@@ -1016,12 +1012,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
-                    elements: {
-                        line: {
-                            borderWidth: 3
-                        }
-                    }
+                    maintainAspectRatio: false
                 }
             });
         }
