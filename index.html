@@ -9,11 +9,19 @@
     <link rel="stylesheet" href="styles.css">
     <!-- 添加Chart.js支持 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- 添加SweetAlert2支持 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
     <div class="container">
         <header class="py-3 mb-4 border-bottom">
-            <h1 class="text-center">全息拉普拉斯互联网爬虫系统</h1>
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>全息拉普拉斯互联网爬虫系统</h1>
+                <div class="d-flex align-items-center">
+                    <span class="me-2">服务器状态:</span>
+                    <div id="serverStatusIndicator" class="status-indicator bg-secondary" title="正在检查服务器状态..."></div>
+                </div>
+            </div>
         </header>
 
         <main>
@@ -62,7 +70,8 @@
                                 </div>
                                 
                                 <div class="d-grid gap-2">
-                                    <button type="button" id="generateBtn" class="btn btn-primary">生成配置文件</button>
+                                    <button type="button" id="runBtn" class="btn btn-primary">运行爬虫</button>
+                                    <button type="button" id="generateBtn" class="btn btn-outline-primary">生成配置文件</button>
                                     <a id="downloadLink" class="btn btn-success d-none" download="crawler_config.json">下载配置文件</a>
                                     <button type="button" id="clearBtn" class="btn btn-secondary">清除输入</button>
                                 </div>
@@ -78,10 +87,10 @@
                             <ol class="small">
                                 <li>在URL列表中输入要爬取的网站地址</li>
                                 <li>设置爬取深度和存储格式</li>
-                                <li>点击"生成配置文件"并下载</li>
-                                <li><a href="scripts/crawler.py" target="_blank">下载爬虫脚本</a></li>
-                                <li>将配置文件放在脚本同目录下运行</li>
-                                <li>脚本完成后，将生成的结果文件上传到此处查看</li>
+                                <li>点击"运行爬虫"直接开始爬取</li>
+                                <li>或者点击"生成配置文件"并下载</li>
+                                <li>查看"任务列表"标签页跟踪任务进度</li>
+                                <li>爬取完成后，可在结果标签页查看分析</li>
                             </ol>
                         </div>
                     </div>
@@ -94,6 +103,9 @@
                             <ul class="nav nav-tabs card-header-tabs" id="resultTabs">
                                 <li class="nav-item">
                                     <a class="nav-link active" id="upload-tab" data-bs-toggle="tab" href="#upload">上传结果</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" id="tasks-tab" data-bs-toggle="tab" href="#tasks">任务列表</a>
                                 </li>
                                 <li class="nav-item">
                                     <a class="nav-link" id="content-tab" data-bs-toggle="tab" href="#content">抓取内容</a>
@@ -126,13 +138,22 @@
                                     </div>
                                 </div>
                                 
+                                <!-- 任务列表标签页 -->
+                                <div class="tab-pane fade" id="tasks">
+                                    <div id="taskList">
+                                        <div class="text-center py-5">
+                                            <p class="text-muted">加载任务列表中...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <!-- 抓取内容标签页 -->
                                 <div class="tab-pane fade" id="content">
                                     <div class="row">
                                         <div class="col-md-4">
-                                            <div class="list-group" id="urlInput">
+                                            <div class="list-group" id="urlList">
                                                 <div class="empty-message text-center py-5">
-                                                    <p class="text-muted">请先上传爬虫结果文件</p>
+                                                    <p class="text-muted">请先上传爬虫结果文件或运行爬虫任务</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -152,7 +173,7 @@
                                         <div class="col-md-3">
                                             <div class="list-group" id="categoryList">
                                                 <div class="empty-message text-center py-5">
-                                                    <p class="text-muted">请先上传爬虫结果文件</p>
+                                                    <p class="text-muted">请先上传爬虫结果文件或运行爬虫任务</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -172,7 +193,7 @@
                                         <div class="col-md-3">
                                             <div class="list-group" id="conspiracyList">
                                                 <div class="empty-message text-center py-5">
-                                                    <p class="text-muted">请先上传爬虫结果文件</p>
+                                                    <p class="text-muted">请先上传爬虫结果文件或运行爬虫任务</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -190,7 +211,7 @@
                                 <div class="tab-pane fade" id="stats">
                                     <div id="statisticsContent">
                                         <div class="empty-message text-center py-5">
-                                            <p class="text-muted">请先上传爬虫结果文件</p>
+                                            <p class="text-muted">请先上传爬虫结果文件或运行爬虫任务</p>
                                         </div>
                                     </div>
                                 </div>
@@ -209,6 +230,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="api_client.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

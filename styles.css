@@ -13,6 +13,26 @@ header {
     background-color: #f8f9fa;
 }
 
+/* 服务器状态指示器 */
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-indicator.bg-success {
+    background-color: #28a745;
+}
+
+.status-indicator.bg-danger {
+    background-color: #dc3545;
+}
+
+.status-indicator.bg-secondary {
+    background-color: #6c757d;
+}
+
 /* 上传区域样式 */
 .upload-area {
     border: 2px dashed #ccc;
@@ -279,6 +299,20 @@ pre {
     display: flex;
 }
 
+/* 任务列表样式 */
+#taskList {
+    min-height: 400px;
+}
+
+.task-details pre {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
 /* 阴谋论检测相关样式 */
 
 /* 引入图标字体 */
@@ -374,6 +408,23 @@ pre {
 
 .conspiracy-normal .urban-legend-header {
     background-color: #28a745;
+}
+
+/* 任务状态颜色 */
+.text-running {
+    color: #0d6efd;
+}
+
+.text-completed {
+    color: #28a745;
+}
+
+.text-failed {
+    color: #dc3545;
+}
+
+.text-pending {
+    color: #ffc107;
 }
 
 /* 检测结果列表样式 */

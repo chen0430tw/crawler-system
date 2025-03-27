@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const urlInput = document.getElementById('urlInput'); // 配置面板中的URL输入文本区域
     const urlListElement = document.querySelector('#content .list-group'); // URL结果列表容器
     
+    // 添加运行按钮引用
+    const runBtn = document.getElementById('runBtn');
+    
     // 标签页引用
     const resultTabs = document.getElementById('resultTabs');
     
@@ -20,13 +23,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const categoryContent = document.getElementById('categoryContent');
     const statisticsContent = document.getElementById('statisticsContent');
     
+    // 添加任务列表引用
+    const taskListContainer = document.getElementById('taskList');
+    
     // 存储爬虫结果
     let crawlerResults = null;
     let selectedUrlIndex = null;
     let selectedCategoryId = null;
     
+    // 添加当前任务ID和状态轮询计时器
+    let currentTaskId = null;
+    let statusPollInterval = null;
+    
     // 创建模态框元素
     createImageModal();
+    createTaskModal();
     
     // 生成配置文件
     generateBtn.addEventListener('click', function() {
@@ -48,6 +59,7 @@ document.addEventListener('DOMContentLoaded', function() {
             depth: parseInt(crawlDepth),
             format: storageFormat,
             concurrency: parseInt(concurrency),
+            enable_urban_legend: true,
             timestamp: new Date().toISOString()
         };
         
@@ -72,6 +84,76 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('concurrency').value = '3';
         downloadLink.classList.add('d-none');
     });
+    
+    // 运行爬虫任务（直接运行而非下载配置）
+    if (runBtn) {
+        runBtn.addEventListener('click', function() {
+            const urlList = urlInput.value.split('\n')
+                .map(url => url.trim())
+                .filter(url => url.length > 0);
+            
+            if (urlList.length === 0) {
+                alert('请输入至少一个URL');
+                return;
+            }
+            
+            const crawlDepth = document.getElementById('crawlDepth').value;
+            const storageFormat = document.querySelector('input[name="storageFormat"]:checked').value;
+            const concurrency = document.getElementById('concurrency').value;
+            
+            const config = {
+                urls: urlList,
+                depth: parseInt(crawlDepth),
+                format: storageFormat,
+                concurrency: parseInt(concurrency),
+                enable_urban_legend: true,
+                timestamp: new Date().toISOString()
+            };
+            
+            // 显示提交中提示
+            Swal.fire({
+                title: '提交任务中',
+                text: '正在提交爬虫任务，请稍候...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // 提交任务
+            ApiClient.submitTask(config)
+                .then(response => {
+                    Swal.close();
+                    
+                    // 保存当前任务ID
+                    currentTaskId = response.task_id;
+                    
+                    // 显示任务已提交提示
+                    Swal.fire({
+                        icon: 'success',
+                        title: '任务已提交',
+                        text: `任务ID: ${currentTaskId}`,
+                        confirmButtonText: '查看任务状态'
+                    }).then(() => {
+                        // 切换到任务列表标签页
+                        document.getElementById('tasks-tab').click();
+                        
+                        // 开始轮询任务状态
+                        startPollingTaskStatus(currentTaskId);
+                        
+                        // 刷新任务列表
+                        refreshTaskList();
+                    });
+                })
+                .catch(error => {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '提交失败',
+                        text: error.message || '提交任务时发生错误'
+                    });
+                });
+        });
+    }
     
     // 文件上传区域拖放功能
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -151,6 +233,485 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         };
         reader.readAsText(file);
+    }
+    
+    // 开始轮询任务状态
+    function startPollingTaskStatus(taskId) {
+        // 先清除现有的轮询计时器
+        if (statusPollInterval) {
+            clearInterval(statusPollInterval);
+        }
+        
+        // 立即获取一次状态
+        getTaskStatus(taskId);
+        
+        // 设置轮询计时器
+        statusPollInterval = setInterval(() => {
+            getTaskStatus(taskId);
+        }, 3000); // 每3秒轮询一次
+    }
+    
+    // 停止轮询任务状态
+    function stopPollingTaskStatus() {
+        if (statusPollInterval) {
+            clearInterval(statusPollInterval);
+            statusPollInterval = null;
+        }
+    }
+    
+    // 获取任务状态
+    function getTaskStatus(taskId) {
+        ApiClient.getTaskStatus(taskId)
+            .then(response => {
+                // 更新任务列表中的任务状态
+                updateTaskInList(response);
+                
+                // 如果任务已完成或失败，停止轮询
+                if (response.status === '已完成' || response.status === '失败') {
+                    stopPollingTaskStatus();
+                    
+                    // 如果任务完成，提示可以查看结果
+                    if (response.status === '已完成') {
+                        // 只在第一次发现任务完成时显示提示
+                        if (currentTaskId === taskId) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: '任务完成',
+                                text: '爬虫任务已完成，可以查看结果',
+                                confirmButtonText: '查看结果'
+                            }).then(() => {
+                                loadTaskResult(taskId);
+                            });
+                            
+                            // 清除当前任务ID，避免重复提示
+                            currentTaskId = null;
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('获取任务状态失败:', error);
+            });
+    }
+    
+    // 加载任务结果
+    function loadTaskResult(taskId) {
+        Swal.fire({
+            title: '加载结果中',
+            text: '正在加载爬虫结果，请稍候...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+        
+        ApiClient.getTaskResult(taskId)
+            .then(result => {
+                Swal.close();
+                
+                // 保存结果
+                crawlerResults = result;
+                
+                // 处理结果
+                processResults(result);
+                
+                // 切换到内容标签页
+                document.getElementById('content-tab').click();
+            })
+            .catch(error => {
+                Swal.fire({
+                    icon: 'error',
+                    title: '加载失败',
+                    text: error.message || '加载任务结果时发生错误'
+                });
+            });
+    }
+    
+    // 刷新任务列表
+    function refreshTaskList() {
+        // 显示加载指示器
+        if (taskListContainer) {
+            taskListContainer.innerHTML = '<div class="text-center py-5"><div class="spinner-border" role="status"><span class="visually-hidden">加载中...</span></div><p class="mt-2">获取任务列表中...</p></div>';
+        }
+        
+        ApiClient.getTasks()
+            .then(tasks => {
+                renderTaskList(tasks);
+            })
+            .catch(error => {
+                if (taskListContainer) {
+                    taskListContainer.innerHTML = `<div class="alert alert-danger" role="alert">获取任务列表失败: ${error.message}</div>`;
+                }
+                console.error('获取任务列表失败:', error);
+            });
+    }
+    
+    // 渲染任务列表
+    function renderTaskList(tasks) {
+        if (!taskListContainer) {
+            console.error("任务列表容器未找到!");
+            return;
+        }
+        
+        if (tasks.length === 0) {
+            taskListContainer.innerHTML = '<div class="text-center py-5"><p class="text-muted">暂无任务</p></div>';
+            return;
+        }
+        
+        let html = '<div class="table-responsive"><table class="table table-hover"><thead><tr>' +
+            '<th>任务ID</th>' +
+            '<th>状态</th>' +
+            '<th>进度</th>' +
+            '<th>创建时间</th>' +
+            '<th>完成时间</th>' +
+            '<th>操作</th>' +
+            '</tr></thead><tbody>';
+        
+        tasks.forEach(task => {
+            const taskId = task.id;
+            const shortId = taskId.substring(0, 8) + '...'; // 显示缩短的任务ID
+            
+            // 根据状态设置不同的样式
+            let statusClass = '';
+            let progressHtml = '';
+            
+            switch (task.status) {
+                case '运行中':
+                    statusClass = 'text-primary';
+                    progressHtml = `<div class="progress" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                            role="progressbar" style="width: ${task.progress}%;" 
+                            aria-valuenow="${task.progress}" aria-valuemin="0" aria-valuemax="100">
+                            ${task.progress}%
+                        </div>
+                    </div>`;
+                    break;
+                case '已完成':
+                    statusClass = 'text-success';
+                    progressHtml = `<div class="progress" style="height: 20px;">
+                        <div class="progress-bar bg-success" 
+                            role="progressbar" style="width: 100%;" 
+                            aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                            100%
+                        </div>
+                    </div>`;
+                    break;
+                case '失败':
+                    statusClass = 'text-danger';
+                    progressHtml = '<span class="badge bg-danger">失败</span>';
+                    break;
+                case '等待中':
+                    statusClass = 'text-warning';
+                    progressHtml = '<span class="badge bg-warning">等待中</span>';
+                    break;
+                default:
+                    progressHtml = `<span>${task.progress}%</span>`;
+            }
+            
+            // 创建时间和完成时间格式化
+            const createdAt = new Date(task.created_at).toLocaleString();
+            const endTime = task.end_time ? new Date(task.end_time).toLocaleString() : '-';
+            
+            // 操作按钮
+            let actionButtons = '';
+            
+            if (task.status === '已完成') {
+                actionButtons = `
+                    <button class="btn btn-sm btn-primary view-result-btn" data-task-id="${taskId}">查看结果</button>
+                    <a href="${ApiClient.getDownloadLink(taskId)}" class="btn btn-sm btn-success">下载结果</a>
+                `;
+            } else if (task.status === '等待中') {
+                actionButtons = `<button class="btn btn-sm btn-danger cancel-task-btn" data-task-id="${taskId}">取消任务</button>`;
+            } else if (task.status === '失败') {
+                actionButtons = `<button class="btn btn-sm btn-info task-error-btn" data-task-id="${taskId}">查看错误</button>`;
+            } else {
+                actionButtons = `<button class="btn btn-sm btn-info task-details-btn" data-task-id="${taskId}">查看详情</button>`;
+            }
+            
+            html += `<tr id="task-row-${taskId}">
+                <td title="${taskId}">${shortId}</td>
+                <td class="${statusClass}">${task.status}</td>
+                <td>${progressHtml}</td>
+                <td>${createdAt}</td>
+                <td>${endTime}</td>
+                <td>${actionButtons}</td>
+            </tr>`;
+        });
+        
+        html += '</tbody></table></div>';
+        
+        // 添加刷新按钮
+        html += '<div class="text-center mt-3">' +
+            '<button id="refresh-tasks-btn" class="btn btn-outline-secondary">' +
+            '<i class="bi bi-arrow-clockwise"></i> 刷新列表' +
+            '</button></div>';
+        
+        taskListContainer.innerHTML = html;
+        
+        // 为操作按钮添加事件监听
+        document.querySelectorAll('.view-result-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const taskId = this.getAttribute('data-task-id');
+                loadTaskResult(taskId);
+            });
+        });
+        
+        document.querySelectorAll('.cancel-task-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const taskId = this.getAttribute('data-task-id');
+                cancelTask(taskId);
+            });
+        });
+        
+        document.querySelectorAll('.task-error-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const taskId = this.getAttribute('data-task-id');
+                showTaskError(taskId);
+            });
+        });
+        
+        document.querySelectorAll('.task-details-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const taskId = this.getAttribute('data-task-id');
+                showTaskDetails(taskId);
+            });
+        });
+        
+        // 为刷新按钮添加事件监听
+        const refreshBtn = document.getElementById('refresh-tasks-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', refreshTaskList);
+        }
+    }
+    
+    // 更新任务列表中的任务状态
+    function updateTaskInList(task) {
+        const taskRow = document.getElementById(`task-row-${task.id}`);
+        if (!taskRow) return;
+        
+        // 更新状态单元格
+        const statusCell = taskRow.querySelector('td:nth-child(2)');
+        if (statusCell) {
+            // 清除原有样式类
+            statusCell.className = '';
+            
+            // 根据状态设置样式
+            switch (task.status) {
+                case '运行中':
+                    statusCell.classList.add('text-primary');
+                    break;
+                case '已完成':
+                    statusCell.classList.add('text-success');
+                    break;
+                case '失败':
+                    statusCell.classList.add('text-danger');
+                    break;
+                case '等待中':
+                    statusCell.classList.add('text-warning');
+                    break;
+            }
+            
+            statusCell.textContent = task.status;
+        }
+        
+        // 更新进度单元格
+        const progressCell = taskRow.querySelector('td:nth-child(3)');
+        if (progressCell) {
+            let progressHtml = '';
+            
+            switch (task.status) {
+                case '运行中':
+                    progressHtml = `<div class="progress" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                            role="progressbar" style="width: ${task.progress}%;" 
+                            aria-valuenow="${task.progress}" aria-valuemin="0" aria-valuemax="100">
+                            ${task.progress}%
+                        </div>
+                    </div>`;
+                    break;
+                case '已完成':
+                    progressHtml = `<div class="progress" style="height: 20px;">
+                        <div class="progress-bar bg-success" 
+                            role="progressbar" style="width: 100%;" 
+                            aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                            100%
+                        </div>
+                    </div>`;
+                    break;
+                case '失败':
+                    progressHtml = '<span class="badge bg-danger">失败</span>';
+                    break;
+                case '等待中':
+                    progressHtml = '<span class="badge bg-warning">等待中</span>';
+                    break;
+                default:
+                    progressHtml = `<span>${task.progress}%</span>`;
+            }
+            
+            progressCell.innerHTML = progressHtml;
+        }
+        
+        // 更新完成时间
+        const endTimeCell = taskRow.querySelector('td:nth-child(5)');
+        if (endTimeCell && task.end_time) {
+            endTimeCell.textContent = new Date(task.end_time).toLocaleString();
+        }
+        
+        // 更新操作按钮
+        const actionCell = taskRow.querySelector('td:nth-child(6)');
+        if (actionCell) {
+            let actionButtons = '';
+            
+            if (task.status === '已完成') {
+                actionButtons = `
+                    <button class="btn btn-sm btn-primary view-result-btn" data-task-id="${task.id}">查看结果</button>
+                    <a href="${ApiClient.getDownloadLink(task.id)}" class="btn btn-sm btn-success">下载结果</a>
+                `;
+                
+                actionCell.innerHTML = actionButtons;
+                
+                // 为新添加的按钮绑定事件
+                actionCell.querySelector('.view-result-btn').addEventListener('click', function() {
+                    loadTaskResult(task.id);
+                });
+            } else if (task.status === '失败' && actionCell.querySelector('.task-error-btn') === null) {
+                actionButtons = `<button class="btn btn-sm btn-info task-error-btn" data-task-id="${task.id}">查看错误</button>`;
+                
+                actionCell.innerHTML = actionButtons;
+                
+                // 为新添加的按钮绑定事件
+                actionCell.querySelector('.task-error-btn').addEventListener('click', function() {
+                    showTaskError(task.id);
+                });
+            }
+        }
+    }
+    
+    // 取消任务
+    function cancelTask(taskId) {
+        Swal.fire({
+            title: '确认取消',
+            text: '确定要取消这个任务吗？',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: '确定',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                ApiClient.cancelTask(taskId)
+                    .then(response => {
+                        Swal.fire({
+                            icon: 'success',
+                            title: '已取消',
+                            text: response.message || '任务已取消'
+                        });
+                        
+                        // 刷新任务列表
+                        refreshTaskList();
+                    })
+                    .catch(error => {
+                        Swal.fire({
+                            icon: 'error',
+                            title: '取消失败',
+                            text: error.message || '取消任务时发生错误'
+                        });
+                    });
+            }
+        });
+    }
+    
+    // 显示任务错误
+    function showTaskError(taskId) {
+        ApiClient.getTaskStatus(taskId)
+            .then(task => {
+                if (task.error) {
+                    Swal.fire({
+                        title: '任务错误',
+                        html: `<div class="text-danger">${task.error}</div>
+                              ${task.traceback ? `<div class="mt-3"><strong>错误详情:</strong>
+                              <pre class="text-start bg-light p-2 mt-2" style="max-height: 300px; overflow-y: auto;">${task.traceback}</pre></div>` : ''}`,
+                        width: 800
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'info',
+                        title: '无错误信息',
+                        text: '未找到此任务的错误信息'
+                    });
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    icon: 'error',
+                    title: '获取错误信息失败',
+                    text: error.message || '获取任务错误信息时发生错误'
+                });
+            });
+    }
+    
+    // 显示任务详情
+    function showTaskDetails(taskId) {
+        ApiClient.getTaskStatus(taskId)
+            .then(task => {
+                const details = task.details || {};
+                const htmlContent = `
+                    <div class="task-details">
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>任务ID:</strong></div>
+                            <div class="col-6 text-start">${task.id}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>状态:</strong></div>
+                            <div class="col-6 text-start">${task.status}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>进度:</strong></div>
+                            <div class="col-6 text-start">${task.progress}%</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>爬取URL数量:</strong></div>
+                            <div class="col-6 text-start">${details.urls_count || '-'}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>爬取深度:</strong></div>
+                            <div class="col-6 text-start">${details.depth || '-'}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>创建时间:</strong></div>
+                            <div class="col-6 text-start">${task.created_at ? new Date(task.created_at).toLocaleString() : '-'}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>开始时间:</strong></div>
+                            <div class="col-6 text-start">${task.start_time ? new Date(task.start_time).toLocaleString() : '-'}</div>
+                        </div>
+                        ${details.crawled_pages !== undefined ? `
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>已爬取页面:</strong></div>
+                            <div class="col-6 text-start">${details.crawled_pages}</div>
+                        </div>
+                        ` : ''}
+                        ${details.processed_pages !== undefined ? `
+                        <div class="row mb-3">
+                            <div class="col-6 text-start"><strong>已处理页面:</strong></div>
+                            <div class="col-6 text-start">${details.processed_pages}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                Swal.fire({
+                    title: '任务详情',
+                    html: htmlContent,
+                    width: 600
+                });
+            })
+            .catch(error => {
+                Swal.fire({
+                    icon: 'error',
+                    title: '获取任务详情失败',
+                    text: error.message || '获取任务详情时发生错误'
+                });
+            });
     }
     
     // 处理爬虫结果 - 修改版
@@ -1018,71 +1579,151 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 添加启动时的调试信息
+    // 创建图片模态框元素
+    function createImageModal() {
+        // 检查是否已存在模态框
+        if (document.getElementById('imageModal')) return;
+        
+        // 创建模态框
+        const modal = document.createElement('div');
+        modal.id = 'imageModal';
+        modal.className = 'image-modal';
+        
+        // 创建图片容器
+        const modalImg = document.createElement('img');
+        modalImg.id = 'modalImage';
+        modalImg.className = 'image-modal-content';
+        modal.appendChild(modalImg);
+        
+        // 点击模态框关闭
+        modal.addEventListener('click', function() {
+            modal.classList.remove('show');
+        });
+        
+        // 添加到页面
+        document.body.appendChild(modal);
+        
+        return {modal, modalImg};
+    }
+    
+    // 创建任务模态框
+    function createTaskModal() {
+        // 检查是否已存在模态框
+        if (document.getElementById('taskModal')) return;
+        
+        // 创建Bootstrap模态框
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.id = 'taskModal';
+        modal.tabIndex = '-1';
+        modal.setAttribute('aria-labelledby', 'taskModalLabel');
+        modal.setAttribute('aria-hidden', 'true');
+        
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="taskModalLabel">任务详情</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="taskModalBody">
+                        <!-- 任务详情内容将动态填充 -->
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        return modal;
+    }
+    
+    // 设置图片点击事件 - 在渲染内容预览后调用
+    function setupImageClickHandlers() {
+        console.log("设置图片点击事件处理");
+        
+        // 确保模态框存在
+        if (!document.getElementById('imageModal')) {
+            createImageModal();
+        }
+        
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('modalImage');
+        
+        // 获取所有内容区域内的图片
+        const images = document.querySelectorAll('.content-body img');
+        console.log(`找到 ${images.length} 张图片`);
+        
+        // 为每个图片添加点击事件
+        images.forEach(img => {
+            img.style.cursor = 'pointer';
+            img.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                
+                console.log("图片被点击:", this.src);
+                
+                // 设置模态框图片源
+                modalImg.src = this.src;
+                
+                // 显示模态框
+                modal.classList.add('show');
+            });
+        });
+    }
+    
+    // 检查服务器状态
+    function checkServerStatus() {
+        ApiClient.checkHealth()
+            .then(health => {
+                console.log("服务器状态:", health);
+                // 可以在界面上显示服务器状态
+                const statusIndicator = document.getElementById('serverStatusIndicator');
+                if (statusIndicator) {
+                    statusIndicator.classList.remove('bg-danger');
+                    statusIndicator.classList.add('bg-success');
+                    statusIndicator.setAttribute('title', `服务器正常 - 活跃任务: ${health.active_tasks}`);
+                }
+            })
+            .catch(error => {
+                console.error("服务器连接失败:", error);
+                // 显示服务器错误状态
+                const statusIndicator = document.getElementById('serverStatusIndicator');
+                if (statusIndicator) {
+                    statusIndicator.classList.remove('bg-success');
+                    statusIndicator.classList.add('bg-danger');
+                    statusIndicator.setAttribute('title', '服务器连接失败');
+                }
+                
+                // 如果是首次加载，显示警告
+                if (!window.serverErrorShown) {
+                    window.serverErrorShown = true;
+                    Swal.fire({
+                        icon: 'warning',
+                        title: '服务器连接失败',
+                        text: '无法连接到爬虫后端服务器，部分功能可能无法使用。请确保服务器已启动。',
+                        confirmButtonText: '我知道了'
+                    });
+                }
+            });
+    }
+    
+    // 添加启动时的初始化逻辑
     console.log("DOM已加载完成");
     console.log("URL输入框元素:", urlInput ? urlInput.tagName : "未找到");
     console.log("URL列表元素:", urlListElement ? urlListElement.tagName : "未找到");
     console.log("分类列表元素:", categoryList ? categoryList.tagName : "未找到");
     console.log("分类内容元素:", categoryContent ? categoryContent.tagName : "未找到");
-});
-
-// 创建模态框元素
-function createImageModal() {
-    // 检查是否已存在模态框
-    if (document.getElementById('imageModal')) return;
     
-    // 创建模态框
-    const modal = document.createElement('div');
-    modal.id = 'imageModal';
-    modal.className = 'image-modal';
+    // 检查服务器连接状态
+    checkServerStatus();
     
-    // 创建图片容器
-    const modalImg = document.createElement('img');
-    modalImg.id = 'modalImage';
-    modalImg.className = 'image-modal-content';
-    modal.appendChild(modalImg);
-    
-    // 点击模态框关闭
-    modal.addEventListener('click', function() {
-        modal.classList.remove('show');
-    });
-    
-    // 添加到页面
-    document.body.appendChild(modal);
-    
-    return {modal, modalImg};
-}
-
-// 设置图片点击事件 - 在渲染内容预览后调用
-function setupImageClickHandlers() {
-    console.log("设置图片点击事件处理");
-    
-    // 确保模态框存在
-    if (!document.getElementById('imageModal')) {
-        createImageModal();
-    }
-    
-    const modal = document.getElementById('imageModal');
-    const modalImg = document.getElementById('modalImage');
-    
-    // 获取所有内容区域内的图片
-    const images = document.querySelectorAll('.content-body img');
-    console.log(`找到 ${images.length} 张图片`);
-    
-    // 为每个图片添加点击事件
-    images.forEach(img => {
-        img.style.cursor = 'pointer';
-        img.addEventListener('click', function(event) {
-            event.preventDefault();
-            event.stopPropagation();
-            
-            console.log("图片被点击:", this.src);
-            
-            // 设置模态框图片源
-            modalImg.src = this.src;
-            
-            // 显示模态框
-            modal.classList.add('show');
+    // 如果存在任务列表标签页，初始化任务列表
+    if (document.getElementById('tasks-tab')) {
+        document.getElementById('tasks-tab').addEventListener('click', function() {
+            refreshTaskList();
         });
-    });
-}
+    }
+});
