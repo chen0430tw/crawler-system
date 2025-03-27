@@ -1029,6 +1029,25 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // 获取初始URL列表
+        let initialUrlsHtml = '';
+        if (crawlerResults && crawlerResults.task_info && crawlerResults.task_info.urls) {
+            const initialUrls = crawlerResults.task_info.urls;
+            initialUrlsHtml = `
+                <div class="stats-card">
+                    <div class="stats-title">起始爬取地址</div>
+                    <div class="initial-urls-list">
+                        ${initialUrls.map((url, index) => `
+                            <div class="stats-row">
+                                <div class="stats-label">${index + 1}:</div>
+                                <div class="stats-value initial-url">${url}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
         // 构建阴谋论统计HTML
         let urbanLegendStatsHtml = '';
         if (stats.urban_legend) {
@@ -1081,6 +1100,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="stats-value">${stats.avgCrawlTime || 0}秒</div>
                 </div>
             </div>
+            
+            ${initialUrlsHtml}
             
             ${urbanLegendStatsHtml}
             
