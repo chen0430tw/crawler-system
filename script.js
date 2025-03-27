@@ -610,6 +610,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     plugins: {
                         legend: {
                             position: 'right'
+                            align: 'center' // 让图例居中对齐
                         },
                         title: {
                             display: false

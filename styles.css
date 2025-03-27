@@ -558,9 +558,12 @@ pre {
 
 /* 确保饼图容器有固定高度且居中 */
 #conspiracyChartContainer > div {
-    height: 300px;
+    height: 250px; /* 减小高度 */
     position: relative;
     margin: 0 auto;
+    display: flex;
+    align-items: center; /* 垂直居中 */
+    justify-content: center; /* 水平居中 */
 }
 
 /* 调整雷达图容器样式 */
