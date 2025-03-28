@@ -93,7 +93,7 @@ fi
 echo -e "${BLUE}更新API客户端配置...${NC}"
 if [ -f "$FRONTEND_DIR/api_client.js" ]; then
     # 替换API基础URL为相对路径
-    sed -i 's|const API_BASE_URL = .*|const API_BASE_URL = \'/api\';|' $FRONTEND_DIR/api_client.js
+    sed -i 's|const API_BASE_URL = .*|const API_BASE_URL = "/api";|' $FRONTEND_DIR/api_client.js
     echo -e "${GREEN}API客户端配置已更新${NC}"
 else
     echo -e "${RED}错误: 找不到API客户端文件${NC}"
