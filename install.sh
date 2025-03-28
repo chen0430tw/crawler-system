@@ -321,31 +321,42 @@ if [ $? -eq 0 ]; then
     sleep 10
     
     # 获取容器IP地址
-    BACKEND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{if eq .NetworkID "'$(docker network inspect $NGINX_NETWORK -f '{{.Id}}')'}}{{.IPAddress}}{{end}}{{end}}' crawler-backend)
+    BACKEND_IP=""
+    
+    # 尝试获取容器在指定网络中的IP地址
+    if docker network inspect $NGINX_NETWORK &>/dev/null; then
+        NETWORK_ID=$(docker network inspect $NGINX_NETWORK -f '{{.Id}}')
+        BACKEND_IP=$(docker inspect -f "{{range .NetworkSettings.Networks}}{{if eq .NetworkID \"$NETWORK_ID\"}}{{.IPAddress}}{{end}}{{end}}" crawler-backend)
+    fi
     
     if [ -z "$BACKEND_IP" ]; then
         echo -e "${RED}无法获取crawler-backend在$NGINX_NETWORK网络中的IP地址${NC}"
-        echo -e "${YELLOW}尝试直接查询web_default网络中的IP地址...${NC}"
+        echo -e "${YELLOW}尝试直接查询特定网络的IP地址...${NC}"
         
-        # 使用更安全的方式获取特定网络的IP地址
-        BACKEND_IP=$(docker inspect -f '{{range $net, $conf := .NetworkSettings.Networks}}{{if eq $net "'$NGINX_NETWORK'"}}{{$conf.IPAddress}}{{end}}{{end}}' crawler-backend)
+        # 尝试使用jq命令解析JSON（如果有）
+        if command -v jq &>/dev/null; then
+            BACKEND_IP=$(docker inspect crawler-backend | jq -r ".[0].NetworkSettings.Networks.\"$NGINX_NETWORK\".IPAddress")
+        fi
         
-        # 如果仍然为空，尝试获取第一个网络的IP地址
-        if [ -z "$BACKEND_IP" ]; then
-            echo -e "${YELLOW}尝试获取第一个可用的IP地址...${NC}"
-            BACKEND_IP=$(docker inspect crawler-backend | grep -oP '"IPAddress": "\K[^"]+' | head -n1)
+        # 如果还是空，尝试使用grep提取
+        if [ -z "$BACKEND_IP" ] || [ "$BACKEND_IP" = "null" ]; then
+            echo -e "${YELLOW}尝试使用grep提取IP地址...${NC}"
+            BACKEND_IP=$(docker inspect crawler-backend | grep -A 10 "\"$NGINX_NETWORK\"" | grep -oP '"IPAddress": "\K[^"]+' | head -n1)
         fi
     fi
     
-    # 验证IP地址格式
-    if [[ ! $BACKEND_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo -e "${RED}获取到的IP地址格式不正确: $BACKEND_IP${NC}"
-        echo -e "${YELLOW}尝试使用固定IP地址...${NC}"
-        # 回退到手动指定IP地址，你可以根据实际情况修改
-        BACKEND_IP="172.18.0.7"
+    # 最后的回退方案 - 使用固定IP
+    if [ -z "$BACKEND_IP" ]; then
+        echo -e "${YELLOW}无法确定IP地址，使用固定IP...${NC}"
+        BACKEND_IP="172.18.0.7"  # 填写你已知的IP地址
     fi
     
     echo -e "${GREEN}爬虫后端IP地址: $BACKEND_IP${NC}"
+else
+    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
+    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
+    exit 1
+fi
 
 # 创建Nginx配置文件
 echo -e "${BLUE}创建Nginx配置文件...${NC}"
