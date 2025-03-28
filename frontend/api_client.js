@@ -1,7 +1,7 @@
 // api_client.js - 全息拉普拉斯互联网爬虫系统API客户端
 
-// 配置API基础URL
-const API_BASE_URL = 'http://localhost:5000/api'; // 默认本地开发地址，部署时需要修改
+// 配置API基础URL - 使用相对路径，这样在Nginx代理后也能正常工作
+const API_BASE_URL = '/api';
 
 // API接口客户端
 const ApiClient = {
@@ -159,7 +159,7 @@ const ApiClient = {
      */
     checkHealth: async function() {
         try {
-            const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`);
+            const response = await fetch('/health');
             
             if (!response.ok) {
                 throw new Error('服务器健康检查失败');

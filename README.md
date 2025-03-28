@@ -1,6 +1,6 @@
 # 全息拉普拉斯互联网爬虫系统
 
-基于全息拉普拉斯互联网图理论的网页爬虫系统，现已支持本地API服务模式。
+基于全息拉普拉斯互联网图理论的网页爬虫系统，现已支持本地API服务模式和Docker部署。
 
 ## 重要更新
 
@@ -17,16 +17,40 @@
 - **内容清洗**：自动移除广告、导航栏等噪声内容
 - **自动分类**：基于内容相似度自动对爬取的网页进行分类
 - **阴谋论检测**：基于全息拉普拉斯互联网图理论的网页内容分析
+- **Docker集成**：与现有Docker环境无缝集成
+- **高度可定制**：支持多种配置选项
 
 ## 系统要求
 
 - Python 3.7 或更高版本
+- Docker 和 Docker Compose (Docker部署模式)
 - 操作系统：Windows/Linux/macOS
 - 现代浏览器（Chrome, Firefox, Edge等）
 
 ## 快速开始
 
-### 服务器模式（推荐）
+### Docker部署模式（推荐）
+
+1. 下载最新版本的软件包:
+
+```bash
+git clone https://github.com/your-username/crawler-system.git
+cd crawler-system
+```
+
+2. 运行安装脚本:
+
+```bash
+sudo ./install.sh
+```
+
+3. 根据提示输入配置信息:
+   - 爬虫系统域名 (例如: crawler.example.com)
+   - Nginx容器名称 (默认: nginx)
+
+4. 安装完成后，通过浏览器访问配置的域名
+
+### 独立服务器模式
 
 #### Windows用户
 1. 双击运行 `start.bat` 文件
@@ -67,13 +91,16 @@ crawler-system/
 │
 ├── backend/                   # 后端文件
 │   ├── crawler_server.py      # 后端服务器
-│   ├── crawler.py             # 爬虫实现（从scripts移入）
+│   ├── crawler.py             # 爬虫实现
 │   └── requirements.txt       # 依赖列表
 │
 ├── scripts/                   # 原有的脚本目录（保留向后兼容性）
 │   ├── crawler.py             # 爬虫脚本（指向backend/crawler.py）
 │   └── setup.py               # 安装脚本
 │
+├── install.sh                 # Docker部署安装脚本
+├── uninstall.sh               # Docker部署卸载脚本
+├── package.sh                 # 打包脚本
 ├── start.bat                  # Windows启动脚本
 ├── startup.sh                 # Linux/macOS启动脚本
 ├── README.md                  # 项目主说明文档
@@ -134,6 +161,34 @@ pip install -r backend/requirements.txt
 pip install flask flask-cors requests beautifulsoup4 nltk scikit-learn
 ```
 
+## Docker部署与管理
+
+### 卸载系统
+
+如需卸载Docker部署的系统，请运行:
+
+```bash
+sudo ./uninstall.sh
+```
+
+### 配置与定制
+
+**Nginx配置**
+
+安装脚本会自动创建并应用Nginx配置。如需手动修改，配置文件位于:
+
+```
+/etc/nginx/conf.d/[您的域名].conf
+```
+
+**后端配置**
+
+后端配置文件位于:
+
+```
+/opt/crawler-system/docker-compose.yml
+```
+
 ## 常见问题
 
 **Q: 服务器启动失败怎么办？**  
@@ -144,6 +199,12 @@ A: 可能是线程池已满，请等待其他任务完成或重启服务器。
 
 **Q: 如何增加爬虫并发数？**  
 A: 在配置面板中选择更高的并发选项。但注意过高的并发可能导致被目标网站屏蔽。
+
+**Q: 如何更改爬虫系统的域名？**  
+A: 需要重新运行安装脚本并指定新的域名。
+
+**Q: Docker部署模式下如何查看日志？**  
+A: 使用命令 `cd /opt/crawler-system && docker-compose logs -f`
 
 ## 理论基础
 
