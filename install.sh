@@ -149,126 +149,6 @@ else
     exit 1
 fi
 
-# 创建Nginx配置文件
-echo -e "${BLUE}创建Nginx配置文件...${NC}"
-NGINX_CONF_FILE="$INSTALL_DIR/crawler-nginx.conf"
-
-# 根据是否使用通配符证书创建不同的配置
-if [ "$USE_WILDCARD" = true ]; then
-    # 使用通配符证书的配置
-    cat > $NGINX_CONF_FILE << EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN_NAME;
-    
-    # HTTP重定向到HTTPS
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    server_name $DOMAIN_NAME;
-    
-    # 使用通配符证书
-    ssl_certificate $CERT_PATH;
-    ssl_certificate_key $CERT_KEY_PATH;
-    
-    # 前端文件目录
-    root /var/www/html/$DOMAIN_NAME;
-    index index.html;
-    
-    # 前端路由处理
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-    
-    # API代理
-    location /api/ {
-        proxy_pass http://crawler-backend:5000/api/;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        
-        # 超时设置
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 120s;
-    }
-    
-    # 健康检查接口
-    location /health {
-        proxy_pass http://crawler-backend:5000/health;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-    }
-    
-    # 静态资源缓存策略
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-        expires 30d;
-        add_header Cache-Control "public, max-age=2592000";
-        log_not_found off;
-    }
-    
-    # 客户端请求大小限制
-    client_max_body_size 50m;
-}
-EOF
-else
-    # 不使用SSL的基本配置，让certbot稍后添加SSL
-    cat > $NGINX_CONF_FILE << EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN_NAME;
-    
-    # 前端文件目录
-    root /var/www/html/$DOMAIN_NAME;
-    index index.html;
-    
-    # 前端路由处理
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-    
-    # API代理
-    location /api/ {
-        proxy_pass http://crawler-backend:5000/api/;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        
-        # 超时设置
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 120s;
-    }
-    
-    # 健康检查接口
-    location /health {
-        proxy_pass http://crawler-backend:5000/health;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-    }
-    
-    # 静态资源缓存策略
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-        expires 30d;
-        add_header Cache-Control "public, max-age=2592000";
-        log_not_found off;
-    }
-    
-    # 客户端请求大小限制
-    client_max_body_size 50m;
-}
-EOF
-fi
-
-echo -e "${GREEN}Nginx配置文件已创建: $NGINX_CONF_FILE${NC}"
-
 # 创建Docker Compose配置
 echo -e "${BLUE}创建Docker Compose配置...${NC}"
 DOCKER_COMPOSE_FILE="$INSTALL_DIR/docker-compose.yml"
@@ -428,6 +308,154 @@ EOF
 chmod +x $CACHE_SCRIPT
 echo -e "${GREEN}缓存清理脚本已创建: $CACHE_SCRIPT${NC}"
 
+# 启动爬虫后端
+echo -e "${BLUE}启动爬虫后端...${NC}"
+cd $INSTALL_DIR
+docker-compose up -d --build
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}爬虫后端构建并启动成功${NC}"
+    
+    # 等待容器完全启动
+    echo -e "${YELLOW}等待容器启动完成...${NC}"
+    sleep 10
+    
+    # 获取容器IP地址
+    BACKEND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{if eq .NetworkID "'$(docker network inspect $NGINX_NETWORK -f '{{.Id}}')'}}{{.IPAddress}}{{end}}{{end}}' crawler-backend)
+    
+    if [ -z "$BACKEND_IP" ]; then
+        echo -e "${RED}无法获取crawler-backend在$NGINX_NETWORK网络中的IP地址${NC}"
+        echo -e "${YELLOW}尝试直接查询所有网络的IP地址...${NC}"
+        BACKEND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' crawler-backend | head -n1)
+    fi
+    
+    echo -e "${GREEN}爬虫后端IP地址: $BACKEND_IP${NC}"
+else
+    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
+    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
+    exit 1
+fi
+
+# 创建Nginx配置文件
+echo -e "${BLUE}创建Nginx配置文件...${NC}"
+NGINX_CONF_FILE="$INSTALL_DIR/crawler-nginx.conf"
+
+# 根据是否使用通配符证书创建不同的配置
+if [ "$USE_WILDCARD" = true ]; then
+    # 使用通配符证书的配置
+    cat > $NGINX_CONF_FILE << EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN_NAME;
+    
+    # HTTP重定向到HTTPS
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name $DOMAIN_NAME;
+    
+    # 使用通配符证书
+    ssl_certificate $CERT_PATH;
+    ssl_certificate_key $CERT_KEY_PATH;
+    
+    # 前端文件目录
+    root /var/www/html/$DOMAIN_NAME;
+    index index.html;
+    
+    # 前端路由处理
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+    
+    # API代理 - 使用IP地址而非主机名
+    location /api/ {
+        proxy_pass http://$BACKEND_IP:5000/api/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 120s;
+    }
+    
+    # 健康检查接口 - 使用IP地址而非主机名
+    location /health {
+        proxy_pass http://$BACKEND_IP:5000/health;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+    
+    # 静态资源缓存策略
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        log_not_found off;
+    }
+    
+    # 客户端请求大小限制
+    client_max_body_size 50m;
+}
+EOF
+else
+    # 不使用SSL的基本配置，让certbot稍后添加SSL
+    cat > $NGINX_CONF_FILE << EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN_NAME;
+    
+    # 前端文件目录
+    root /var/www/html/$DOMAIN_NAME;
+    index index.html;
+    
+    # 前端路由处理
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+    
+    # API代理 - 使用IP地址而非主机名
+    location /api/ {
+        proxy_pass http://$BACKEND_IP:5000/api/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 120s;
+    }
+    
+    # 健康检查接口 - 使用IP地址而非主机名
+    location /health {
+        proxy_pass http://$BACKEND_IP:5000/health;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+    
+    # 静态资源缓存策略
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        log_not_found off;
+    }
+    
+    # 客户端请求大小限制
+    client_max_body_size 50m;
+}
+EOF
+fi
+
+echo -e "${GREEN}Nginx配置文件已创建: $NGINX_CONF_FILE${NC}"
+
 # 将前端文件复制到Nginx容器
 echo -e "${BLUE}将前端文件复制到Nginx容器...${NC}"
 CONTAINER_HTML_DIR="/var/www/html/$DOMAIN_NAME"
@@ -490,18 +518,6 @@ if [ "$USE_WILDCARD" = false ]; then
         echo -e "${YELLOW}未找到Certbot，跳过SSL证书配置${NC}"
         echo -e "${YELLOW}您可以稍后手动配置SSL或使用Cloudflare等CDN服务启用HTTPS${NC}"
     fi
-fi
-
-# 启动爬虫后端
-echo -e "${BLUE}启动爬虫后端...${NC}"
-cd $INSTALL_DIR
-docker-compose up -d --build
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}爬虫后端构建并启动成功${NC}"
-else
-    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
-    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
 fi
 
 # 安装完成
