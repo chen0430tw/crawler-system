@@ -320,35 +320,47 @@ if [ $? -eq 0 ]; then
     echo -e "${YELLOW}等待容器启动完成...${NC}"
     sleep 10
     
-    # 获取容器IP地址
+    # 获取容器IP地址 - 使用更安全可靠的方法
     BACKEND_IP=""
     
-    # 尝试获取容器在指定网络中的IP地址
+    # 方法1: 使用网络ID检索IP
     if docker network inspect $NGINX_NETWORK &>/dev/null; then
         NETWORK_ID=$(docker network inspect $NGINX_NETWORK -f '{{.Id}}')
         BACKEND_IP=$(docker inspect -f "{{range .NetworkSettings.Networks}}{{if eq .NetworkID \"$NETWORK_ID\"}}{{.IPAddress}}{{end}}{{end}}" crawler-backend)
     fi
     
+    # 方法2: 直接使用网络名检索
     if [ -z "$BACKEND_IP" ]; then
-        echo -e "${RED}无法获取crawler-backend在$NGINX_NETWORK网络中的IP地址${NC}"
-        echo -e "${YELLOW}尝试直接查询特定网络的IP地址...${NC}"
-        
-        # 尝试使用jq命令解析JSON（如果有）
-        if command -v jq &>/dev/null; then
-            BACKEND_IP=$(docker inspect crawler-backend | jq -r ".[0].NetworkSettings.Networks.\"$NGINX_NETWORK\".IPAddress")
-        fi
-        
-        # 如果还是空，尝试使用grep提取
-        if [ -z "$BACKEND_IP" ] || [ "$BACKEND_IP" = "null" ]; then
-            echo -e "${YELLOW}尝试使用grep提取IP地址...${NC}"
-            BACKEND_IP=$(docker inspect crawler-backend | grep -A 10 "\"$NGINX_NETWORK\"" | grep -oP '"IPAddress": "\K[^"]+' | head -n1)
+        BACKEND_IP=$(docker inspect -f "{{range \$k, \$v := .NetworkSettings.Networks}}{{if eq \$k \"$NGINX_NETWORK\"}}{{\$v.IPAddress}}{{end}}{{end}}" crawler-backend)
+    fi
+    
+    # 方法3: 使用grep提取特定网络的IP
+    if [ -z "$BACKEND_IP" ]; then
+        NETWORK_INFO=$(docker inspect crawler-backend | grep -A 15 "\"$NGINX_NETWORK\":" | grep -m 1 "IPAddress")
+        if [ -n "$NETWORK_INFO" ]; then
+            BACKEND_IP=$(echo $NETWORK_INFO | grep -o -P '(?<="IPAddress": ")[^"]+')
         fi
     fi
     
-    # 最后的回退方案 - 使用固定IP
-    if [ -z "$BACKEND_IP" ]; then
-        echo -e "${YELLOW}无法确定IP地址，使用固定IP...${NC}"
-        BACKEND_IP="172.18.0.7"  # 填写你已知的IP地址
+    # 确保IP地址格式正确
+    if [[ ! $BACKEND_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${RED}警告: 获取到的IP地址格式不正确: '$BACKEND_IP'${NC}"
+        echo -e "${YELLOW}将尝试获取第一个可用的IP地址...${NC}"
+        
+        # 提取第一个有效的IP地址
+        BACKEND_IP=$(docker inspect crawler-backend | grep -o -P '"IPAddress": "\K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"' | head -n1)
+        
+        # 仍然无法获取有效IP，使用固定IP
+        if [[ ! $BACKEND_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo -e "${RED}无法自动获取IP地址，使用固定IP...${NC}"
+            read -p "请手动输入crawler-backend容器的IP地址: " BACKEND_IP
+            
+            # 如果用户没有输入，使用默认值
+            if [ -z "$BACKEND_IP" ]; then
+                BACKEND_IP="172.18.0.2"  # 默认Docker网络的可能IP
+                echo -e "${YELLOW}使用默认IP地址: $BACKEND_IP${NC}"
+            fi
+        fi
     fi
     
     echo -e "${GREEN}爬虫后端IP地址: $BACKEND_IP${NC}"
@@ -478,9 +490,36 @@ fi
 
 echo -e "${GREEN}Nginx配置文件已创建: $NGINX_CONF_FILE${NC}"
 
-# 将前端文件复制到Nginx容器
+# 将前端文件复制到Nginx容器 - 安全版本
 echo -e "${BLUE}将前端文件复制到Nginx容器...${NC}"
 CONTAINER_HTML_DIR="/var/www/html/$DOMAIN_NAME"
+
+# 检查目录是否已存在并包含内容
+DIR_EXISTS=$(docker exec $NGINX_CONTAINER test -d $CONTAINER_HTML_DIR && echo "exists" || echo "not_exists")
+if [ "$DIR_EXISTS" = "exists" ]; then
+    # 检查目录中是否有文件
+    FILES_COUNT=$(docker exec $NGINX_CONTAINER sh -c "find $CONTAINER_HTML_DIR -type f | wc -l")
+    if [ "$FILES_COUNT" -gt 0 ]; then
+        echo -e "${YELLOW}警告: 目录 $CONTAINER_HTML_DIR 已存在并包含 $FILES_COUNT 个文件${NC}"
+        echo -e "${YELLOW}此操作可能会覆盖现有文件，这可能影响其他网站${NC}"
+        
+        read -p "是否继续？ (yes/no): " CONTINUE
+        if [[ "$CONTINUE" != "yes" && "$CONTINUE" != "y" ]]; then
+            echo -e "${RED}操作已取消${NC}"
+            echo -e "${YELLOW}请选择其他域名或手动清理目录${NC}"
+            exit 1
+        fi
+        
+        # 创建备份
+        BACKUP_TIME=$(date +%Y%m%d%H%M%S)
+        BACKUP_DIR="${CONTAINER_HTML_DIR}_backup_${BACKUP_TIME}"
+        echo -e "${BLUE}创建现有内容的备份...${NC}"
+        docker exec $NGINX_CONTAINER sh -c "cp -a $CONTAINER_HTML_DIR $BACKUP_DIR"
+        echo -e "${GREEN}备份已创建: $BACKUP_DIR${NC}"
+    else
+        echo -e "${GREEN}目录存在但为空，可以安全地继续${NC}"
+    fi
+fi
 
 # 在Nginx容器内创建目录
 docker exec $NGINX_CONTAINER mkdir -p $CONTAINER_HTML_DIR
