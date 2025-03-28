@@ -325,16 +325,27 @@ if [ $? -eq 0 ]; then
     
     if [ -z "$BACKEND_IP" ]; then
         echo -e "${RED}无法获取crawler-backend在$NGINX_NETWORK网络中的IP地址${NC}"
-        echo -e "${YELLOW}尝试直接查询所有网络的IP地址...${NC}"
-        BACKEND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' crawler-backend | head -n1)
+        echo -e "${YELLOW}尝试直接查询web_default网络中的IP地址...${NC}"
+        
+        # 使用更安全的方式获取特定网络的IP地址
+        BACKEND_IP=$(docker inspect -f '{{range $net, $conf := .NetworkSettings.Networks}}{{if eq $net "'$NGINX_NETWORK'"}}{{$conf.IPAddress}}{{end}}{{end}}' crawler-backend)
+        
+        # 如果仍然为空，尝试获取第一个网络的IP地址
+        if [ -z "$BACKEND_IP" ]; then
+            echo -e "${YELLOW}尝试获取第一个可用的IP地址...${NC}"
+            BACKEND_IP=$(docker inspect crawler-backend | grep -oP '"IPAddress": "\K[^"]+' | head -n1)
+        fi
+    fi
+    
+    # 验证IP地址格式
+    if [[ ! $BACKEND_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${RED}获取到的IP地址格式不正确: $BACKEND_IP${NC}"
+        echo -e "${YELLOW}尝试使用固定IP地址...${NC}"
+        # 回退到手动指定IP地址，你可以根据实际情况修改
+        BACKEND_IP="172.18.0.7"
     fi
     
     echo -e "${GREEN}爬虫后端IP地址: $BACKEND_IP${NC}"
-else
-    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
-    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
-    exit 1
-fi
 
 # 创建Nginx配置文件
 echo -e "${BLUE}创建Nginx配置文件...${NC}"
