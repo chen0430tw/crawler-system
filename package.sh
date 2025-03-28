@@ -116,9 +116,10 @@ EOF
 
 # 打包文件
 echo -e "${BLUE}打包文件...${NC}"
+CURRENT_DIR=$(pwd)
 cd $TEMP_DIR
-tar -czf "../$PACKAGE_NAME-$VERSION.tar.gz" .
-cd ..
+tar -czf "$CURRENT_DIR/$PACKAGE_NAME-$VERSION.tar.gz" .
+cd "$CURRENT_DIR"
 
 # 清理临时目录
 rm -rf $TEMP_DIR
