@@ -282,26 +282,83 @@ echo -e "${BLUE}检查现有证书和配置模板...${NC}"
 if docker exec $NGINX_CONTAINER test -f /etc/nginx/conf.d/bbs.newrin.link.conf; then
     echo -e "${GREEN}找到现有配置模板: bbs.newrin.link${NC}"
     
-    # 创建临时配置文件
+    # 不再直接复制模板配置，而是创建适合爬虫系统的新配置
+    echo -e "${YELLOW}创建适合爬虫系统的新配置，而不是直接复制PHP应用的配置...${NC}"
+    
+    # 创建新的配置文件
     TMP_CONF=$(mktemp)
-    docker exec $NGINX_CONTAINER cat /etc/nginx/conf.d/bbs.newrin.link.conf > $TMP_CONF
     
-    # 替换域名
-    sed -i "s/bbs\.newrin\.link/$DOMAIN_NAME/g" $TMP_CONF
+    cat > $TMP_CONF << EOF
+server {
+    listen 80;
+    listen [::]:80;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name $DOMAIN_NAME;
     
-    # 将修改后的配置复制到Nginx容器
+    ssl_certificate /etc/nginx/certs/${DOMAIN_NAME}_cert.pem;
+    ssl_certificate_key /etc/nginx/certs/${DOMAIN_NAME}_key.pem;
+    
+    if (\$scheme = http) {
+        return 301 https://\$host\$request_uri;
+    }
+    
+    # 根目录指向爬虫系统的前端文件
+    root /var/www/html/$DOMAIN_NAME;
+    index index.html;
+    
+    # 前端路由处理
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+    
+    # API代理
+    location /api/ {
+        proxy_pass http://crawler-backend:5000/api/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 120s;
+    }
+    
+    # 健康检查接口
+    location /health {
+        proxy_pass http://crawler-backend:5000/health;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+    
+    # 静态资源缓存策略
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)\$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        add_header Alt-Svc 'h3=":443"; ma=86400';
+        log_not_found off;
+    }
+    
+    # 客户端请求大小限制
+    client_max_body_size 50m;
+}
+EOF
+    
+    # 将配置复制到Nginx容器
     docker cp $TMP_CONF $NGINX_CONTAINER:/etc/nginx/conf.d/$DOMAIN_NAME.conf
     
-    # 复制证书文件
+    # 复制证书文件 - 仍然保留原来的证书复制部分
     docker exec $NGINX_CONTAINER cp /etc/nginx/certs/bbs.newrin.link_cert.pem /etc/nginx/certs/${DOMAIN_NAME}_cert.pem
     docker exec $NGINX_CONTAINER cp /etc/nginx/certs/bbs.newrin.link_key.pem /etc/nginx/certs/${DOMAIN_NAME}_key.pem
     
-    echo -e "${GREEN}已复制并修改配置模板${NC}"
+    echo -e "${GREEN}已创建适合爬虫系统的新配置${NC}"
     echo -e "${GREEN}已复制证书文件${NC}"
     
     rm -f $TMP_CONF
 else
-    # 没有找到模板，创建基本HTTP配置
+    # 没有找到模板，创建基本HTTP配置 - 保留原来的逻辑
     echo -e "${YELLOW}未找到配置模板，创建基本HTTP配置${NC}"
     
     # 创建Nginx配置文件
@@ -344,7 +401,7 @@ server {
     }
     
     # 静态资源缓存策略
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)\$ {
         expires 30d;
         add_header Cache-Control "public, max-age=2592000";
         log_not_found off;
@@ -388,7 +445,29 @@ if echo "$NGINX_TEST" | grep -q "successful"; then
 else
     echo -e "${RED}Nginx配置验证失败:${NC}"
     echo "$NGINX_TEST"
-    echo -e "${YELLOW}请手动修复Nginx配置并重新加载${NC}"
+    
+    # 尝试自动修复常见错误
+    echo -e "${YELLOW}尝试自动修复错误...${NC}"
+    
+    # 检查是否存在.nginx.conf错误
+    if echo "$NGINX_TEST" | grep -q "\.nginx\.conf"; then
+        echo -e "${YELLOW}检测到.nginx.conf错误，创建空文件...${NC}"
+        docker exec $NGINX_CONTAINER touch /var/www/html/$DOMAIN_NAME/.nginx.conf
+        
+        # 再次验证配置
+        NGINX_TEST_RETRY=$(docker exec $NGINX_CONTAINER nginx -t 2>&1)
+        
+        if echo "$NGINX_TEST_RETRY" | grep -q "successful"; then
+            echo -e "${GREEN}修复成功，Nginx配置验证通过${NC}"
+            docker exec $NGINX_CONTAINER nginx -s reload
+            echo -e "${GREEN}Nginx配置已重新加载${NC}"
+        else
+            echo -e "${RED}自动修复失败，请手动修复Nginx配置${NC}"
+            echo -e "${YELLOW}可能需要检查以下文件: /etc/nginx/conf.d/$DOMAIN_NAME.conf${NC}"
+        fi
+    else
+        echo -e "${RED}无法自动修复，请手动修复Nginx配置并重新加载${NC}"
+    fi
 fi
 
 # 启动爬虫后端
