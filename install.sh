@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 全息拉普拉斯互联网爬虫系统 - 一键安装脚本
-# 优化版本，融合新旧版本特点
+# 优化版本，自动复用现有证书
 
 # 设置颜色输出
 RED='\033[0;31m'
@@ -277,12 +277,37 @@ EOF
 chmod +x $CACHE_SCRIPT
 echo -e "${GREEN}缓存清理脚本已创建: $CACHE_SCRIPT${NC}"
 
-# 创建Nginx配置文件，保持简洁
-echo -e "${BLUE}创建Nginx配置文件...${NC}"
-NGINX_CONF_FILE="$INSTALL_DIR/crawler-nginx.conf"
-
-# 参考旧版脚本，创建一个简单的配置
-cat > $NGINX_CONF_FILE << EOF
+# 获取bbs配置作为模板
+echo -e "${BLUE}检查现有证书和配置模板...${NC}"
+if docker exec $NGINX_CONTAINER test -f /etc/nginx/conf.d/bbs.newrin.link.conf; then
+    echo -e "${GREEN}找到现有配置模板: bbs.newrin.link${NC}"
+    
+    # 创建临时配置文件
+    TMP_CONF=$(mktemp)
+    docker exec $NGINX_CONTAINER cat /etc/nginx/conf.d/bbs.newrin.link.conf > $TMP_CONF
+    
+    # 替换域名
+    sed -i "s/bbs\.newrin\.link/$DOMAIN_NAME/g" $TMP_CONF
+    
+    # 将修改后的配置复制到Nginx容器
+    docker cp $TMP_CONF $NGINX_CONTAINER:/etc/nginx/conf.d/$DOMAIN_NAME.conf
+    
+    # 复制证书文件
+    docker exec $NGINX_CONTAINER cp /etc/nginx/certs/bbs.newrin.link_cert.pem /etc/nginx/certs/${DOMAIN_NAME}_cert.pem
+    docker exec $NGINX_CONTAINER cp /etc/nginx/certs/bbs.newrin.link_key.pem /etc/nginx/certs/${DOMAIN_NAME}_key.pem
+    
+    echo -e "${GREEN}已复制并修改配置模板${NC}"
+    echo -e "${GREEN}已复制证书文件${NC}"
+    
+    rm -f $TMP_CONF
+else
+    # 没有找到模板，创建基本HTTP配置
+    echo -e "${YELLOW}未找到配置模板，创建基本HTTP配置${NC}"
+    
+    # 创建Nginx配置文件
+    NGINX_CONF_FILE="$INSTALL_DIR/crawler-nginx.conf"
+    
+    cat > $NGINX_CONF_FILE << EOF
 server {
     listen 80;
     listen [::]:80;
@@ -297,7 +322,7 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
     
-    # API代理，使用容器名作为主机名
+    # API代理
     location /api/ {
         proxy_pass http://crawler-backend:5000/api/;
         proxy_set_header Host \$host;
@@ -330,7 +355,9 @@ server {
 }
 EOF
 
-echo -e "${GREEN}Nginx配置文件已创建: $NGINX_CONF_FILE${NC}"
+    # 将Nginx配置复制到容器
+    docker cp $NGINX_CONF_FILE $NGINX_CONTAINER:/etc/nginx/conf.d/$DOMAIN_NAME.conf
+fi
 
 # 将前端文件复制到Nginx容器
 echo -e "${BLUE}将前端文件复制到Nginx容器...${NC}"
@@ -348,10 +375,6 @@ docker cp $TMP_DIR/. $NGINX_CONTAINER:$CONTAINER_HTML_DIR/
 rm -rf $TMP_DIR
 
 echo -e "${GREEN}前端文件已复制到Nginx容器${NC}"
-
-# 将Nginx配置复制到容器
-echo -e "${BLUE}将Nginx配置复制到容器...${NC}"
-docker cp $NGINX_CONF_FILE $NGINX_CONTAINER:/etc/nginx/conf.d/$DOMAIN_NAME.conf
 
 # 检查Nginx配置
 echo -e "${BLUE}验证Nginx配置...${NC}"
@@ -386,12 +409,18 @@ echo -e "${GREEN}全息拉普拉斯互联网爬虫系统安装完成!${NC}"
 echo -e "${BLUE}==============================================${NC}"
 echo ""
 echo -e "您的爬虫系统现已安装在 ${YELLOW}$INSTALL_DIR${NC}"
-echo -e "前端界面可通过 ${YELLOW}http://$DOMAIN_NAME${NC} 访问"
+
+if docker exec $NGINX_CONTAINER test -f /etc/nginx/certs/${DOMAIN_NAME}_cert.pem; then
+    echo -e "前端界面可通过 ${YELLOW}https://$DOMAIN_NAME${NC} 访问"
+else
+    echo -e "前端界面可通过 ${YELLOW}http://$DOMAIN_NAME${NC} 访问"
+    echo -e "${YELLOW}如需配置HTTPS，您可以参考已有的配置文件:${NC}"
+    echo -e "  例如: ${YELLOW}/etc/nginx/conf.d/bbs.newrin.link.conf${NC}"
+fi
+
 echo -e "确保您已经设置DNS记录，将 ${YELLOW}$DOMAIN_NAME${NC} 指向您的服务器IP"
 echo ""
-echo -e "${YELLOW}如需配置HTTPS，您可以参考已有的配置文件:${NC}"
-echo -e "  例如: ${YELLOW}/etc/nginx/conf.d/bbs.newrin.link.conf${NC}"
-echo ""
+
 echo -e "${BLUE}系统管理命令:${NC}"
 echo -e "  启动: ${YELLOW}cd $INSTALL_DIR && docker-compose up -d${NC}"
 echo -e "  停止: ${YELLOW}cd $INSTALL_DIR && docker-compose down${NC}"
