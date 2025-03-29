@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 全息拉普拉斯互联网爬虫系统 - 一键安装脚本
-# 已针对Nginx配置和SSL证书问题进行优化
+# 优化版本，融合新旧版本特点
 
 # 设置颜色输出
 RED='\033[0;31m'
@@ -55,62 +55,6 @@ if ! docker ps | grep -q "$NGINX_CONTAINER"; then
     exit 1
 fi
 
-# 检查是否存在通配符证书
-echo -e "${BLUE}检查SSL证书...${NC}"
-
-# 获取主域名（例如从crawler.example.com获取example.com）
-MAIN_DOMAIN=$(echo $DOMAIN_NAME | awk -F. '{print $(NF-1)"."$NF}')
-echo -e "主域名: ${YELLOW}$MAIN_DOMAIN${NC}"
-
-# 检查通配符证书
-CERT_PATH=""
-CERT_KEY_PATH=""
-USE_WILDCARD=false
-
-# 检查Nginx容器中是否存在通配符证书
-if docker exec $NGINX_CONTAINER test -f /etc/letsencrypt/live/$MAIN_DOMAIN/fullchain.pem; then
-    echo -e "${GREEN}找到主域名证书: /etc/letsencrypt/live/$MAIN_DOMAIN/fullchain.pem${NC}"
-
-    # 检查证书是否为通配符证书
-    CERT_INFO=$(docker exec $NGINX_CONTAINER openssl x509 -in /etc/letsencrypt/live/$MAIN_DOMAIN/fullchain.pem -text -noout | grep "Subject Alternative Name" -A1)
-
-    if echo "$CERT_INFO" | grep -q "\*.$MAIN_DOMAIN"; then
-        echo -e "${GREEN}✓ 找到通配符证书，将使用它来保护 $DOMAIN_NAME${NC}"
-        CERT_PATH="/etc/letsencrypt/live/$MAIN_DOMAIN/fullchain.pem"
-        CERT_KEY_PATH="/etc/letsencrypt/live/$MAIN_DOMAIN/privkey.pem"
-        USE_WILDCARD=true
-    else
-        echo -e "${YELLOW}找到主域名证书，但不是通配符证书${NC}"
-    fi
-else
-    echo -e "${YELLOW}未找到主域名证书，将检查其他位置...${NC}"
-fi
-
-# 添加检查/etc/nginx/certs/目录下的证书
-echo -e "${BLUE}检查自定义证书目录...${NC}"
-
-# 检查Nginx容器中是否存在自定义证书
-CUSTOM_CERT_PATH="/etc/nginx/certs/${DOMAIN_NAME}_cert.pem"
-CUSTOM_KEY_PATH="/etc/nginx/certs/${DOMAIN_NAME}_key.pem"
-
-if docker exec $NGINX_CONTAINER test -f "$CUSTOM_CERT_PATH"; then
-    echo -e "${GREEN}找到自定义证书: $CUSTOM_CERT_PATH${NC}"
-    
-    # 检查对应的密钥文件
-    if docker exec $NGINX_CONTAINER test -f "$CUSTOM_KEY_PATH"; then
-        echo -e "${GREEN}✓ 找到对应密钥: $CUSTOM_KEY_PATH${NC}"
-        CERT_PATH="$CUSTOM_CERT_PATH"
-        CERT_KEY_PATH="$CUSTOM_KEY_PATH"
-        USE_WILDCARD=true  # 使用此标志表示已找到可用证书
-        
-        echo -e "${GREEN}✓ 将使用自定义证书保护 $DOMAIN_NAME${NC}"
-    else
-        echo -e "${YELLOW}找到证书但未找到对应密钥文件${NC}"
-    fi
-else
-    echo -e "${YELLOW}未在自定义目录找到证书，继续检查其他位置...${NC}"
-fi
-
 # 获取Nginx容器的网络
 echo -e "${BLUE}检测Docker网络配置...${NC}"
 NGINX_NETWORKS=$(docker inspect -f '{{range $key, $value := .NetworkSettings.Networks}}{{$key}} {{end}}' $NGINX_CONTAINER)
@@ -145,7 +89,7 @@ if [ -f "crawler-system.tar.gz" ]; then
 else
     # 如果没有找到压缩包，复制当前目录下的文件
     echo -e "${YELLOW}未找到压缩包，将使用当前目录下的文件${NC}"
-
+    
     # 复制前端文件
     if [ -d "frontend" ]; then
         cp -r frontend/* $FRONTEND_DIR/
@@ -153,7 +97,7 @@ else
         echo -e "${RED}错误: 找不到前端文件目录${NC}"
         exit 1
     fi
-
+    
     # 复制后端文件
     if [ -d "backend" ]; then
         cp -r backend/* $BACKEND_DIR/
@@ -183,7 +127,7 @@ version: '3.8'
 
 services:
   crawler-backend:
-    build:
+    build: 
       context: ./backend
       dockerfile: Dockerfile
     container_name: crawler-backend
@@ -333,218 +277,64 @@ EOF
 chmod +x $CACHE_SCRIPT
 echo -e "${GREEN}缓存清理脚本已创建: $CACHE_SCRIPT${NC}"
 
-# 启动爬虫后端
-echo -e "${BLUE}启动爬虫后端...${NC}"
-cd $INSTALL_DIR
-docker-compose up -d --build
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}爬虫后端构建并启动成功${NC}"
-
-    # 等待容器完全启动
-    echo -e "${YELLOW}等待容器启动完成...${NC}"
-    sleep 10
-
-    # 获取容器IP地址 - 使用更安全可靠的方法
-    BACKEND_IP=""
-
-    # 方法1: 使用网络ID检索IP
-    if docker network inspect $NGINX_NETWORK &>/dev/null; then
-        NETWORK_ID=$(docker network inspect $NGINX_NETWORK -f '{{.Id}}')
-        BACKEND_IP=$(docker inspect -f "{{range .NetworkSettings.Networks}}{{if eq .NetworkID \"$NETWORK_ID\"}}{{.IPAddress}}{{end}}{{end}}" crawler-backend)
-    fi
-
-    # 方法2: 直接使用网络名检索
-    if [ -z "$BACKEND_IP" ]; then
-        BACKEND_IP=$(docker inspect -f "{{range \$k, \$v := .NetworkSettings.Networks}}{{if eq \$k \"$NGINX_NETWORK\"}}{{\$v.IPAddress}}{{end}}{{end}}" crawler-backend)
-    fi
-
-    # 方法3: 使用grep提取特定网络的IP
-    if [ -z "$BACKEND_IP" ]; then
-        NETWORK_INFO=$(docker inspect crawler-backend | grep -A 15 "\"$NGINX_NETWORK\":" | grep -m 1 "IPAddress")
-        if [ -n "$NETWORK_INFO" ]; then
-            BACKEND_IP=$(echo $NETWORK_INFO | grep -o -P '(?<="IPAddress": ")[^"]+')
-        fi
-    fi
-
-    # 确保IP地址格式正确
-    if [[ ! $BACKEND_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo -e "${RED}警告: 获取到的IP地址格式不正确: '$BACKEND_IP'${NC}"
-        echo -e "${YELLOW}将尝试获取第一个可用的IP地址...${NC}"
-
-        # 提取第一个有效的IP地址
-        BACKEND_IP=$(docker inspect crawler-backend | grep -o -P '"IPAddress": "\K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"' | head -n1)
-
-        # 仍然无法获取有效IP，使用固定IP
-        if [[ ! $BACKEND_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo -e "${RED}无法自动获取IP地址，使用固定IP...${NC}"
-            read -p "请手动输入crawler-backend容器的IP地址: " BACKEND_IP
-
-            # 如果用户没有输入，使用默认值
-            if [ -z "$BACKEND_IP" ]; then
-                BACKEND_IP="172.18.0.2"  # 默认Docker网络的可能IP
-                echo -e "${YELLOW}使用默认IP地址: $BACKEND_IP${NC}"
-            fi
-        fi
-    fi
-
-    echo -e "${GREEN}爬虫后端IP地址: $BACKEND_IP${NC}"
-else
-    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
-    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
-    exit 1
-fi
-
-# 创建Nginx配置文件
+# 创建Nginx配置文件，保持简洁
 echo -e "${BLUE}创建Nginx配置文件...${NC}"
 NGINX_CONF_FILE="$INSTALL_DIR/crawler-nginx.conf"
 
-# 根据是否使用通配符证书创建不同的配置
-if [ "$USE_WILDCARD" = true ]; then
-    # 使用通配符证书的配置
-    cat > $NGINX_CONF_FILE << EOF
+# 参考旧版脚本，创建一个简单的配置
+cat > $NGINX_CONF_FILE << EOF
 server {
     listen 80;
     listen [::]:80;
     server_name $DOMAIN_NAME;
-
-    # HTTP重定向到HTTPS
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    server_name $DOMAIN_NAME;
-
-    # 使用证书
-    ssl_certificate $CERT_PATH;
-    ssl_certificate_key $CERT_KEY_PATH;
-
+    
     # 前端文件目录
     root /var/www/html/$DOMAIN_NAME;
     index index.html;
-
+    
     # 前端路由处理
     location / {
         try_files \$uri \$uri/ /index.html;
     }
-
-    # API代理 - 使用IP地址而非主机名
+    
+    # API代理，使用容器名作为主机名
     location /api/ {
-        proxy_pass http://$BACKEND_IP:5000/api/;
+        proxy_pass http://crawler-backend:5000/api/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-
+        
         # 超时设置
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 120s;
     }
-
-    # 健康检查接口 - 使用IP地址而非主机名
+    
+    # 健康检查接口
     location /health {
-        proxy_pass http://$BACKEND_IP:5000/health;
+        proxy_pass http://crawler-backend:5000/health;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
     }
-
+    
     # 静态资源缓存策略
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
         expires 30d;
         add_header Cache-Control "public, max-age=2592000";
         log_not_found off;
     }
-
+    
     # 客户端请求大小限制
     client_max_body_size 50m;
 }
 EOF
-else
-    # 不使用SSL的基本配置，让certbot稍后添加SSL
-    cat > $NGINX_CONF_FILE << EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN_NAME;
-
-    # 前端文件目录
-    root /var/www/html/$DOMAIN_NAME;
-    index index.html;
-
-    # 前端路由处理
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    # API代理 - 使用IP地址而非主机名
-    location /api/ {
-        proxy_pass http://$BACKEND_IP:5000/api/;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        # 超时设置
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 120s;
-    }
-
-    # 健康检查接口 - 使用IP地址而非主机名
-    location /health {
-        proxy_pass http://$BACKEND_IP:5000/health;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-    }
-
-    # 静态资源缓存策略
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-        expires 30d;
-        add_header Cache-Control "public, max-age=2592000";
-        log_not_found off;
-    }
-
-    # 客户端请求大小限制
-    client_max_body_size 50m;
-}
-EOF
-fi
 
 echo -e "${GREEN}Nginx配置文件已创建: $NGINX_CONF_FILE${NC}"
 
-# 将前端文件复制到Nginx容器 - 安全版本
+# 将前端文件复制到Nginx容器
 echo -e "${BLUE}将前端文件复制到Nginx容器...${NC}"
 CONTAINER_HTML_DIR="/var/www/html/$DOMAIN_NAME"
-
-# 检查目录是否已存在并包含内容
-DIR_EXISTS=$(docker exec $NGINX_CONTAINER test -d $CONTAINER_HTML_DIR && echo "exists" || echo "not_exists")
-if [ "$DIR_EXISTS" = "exists" ]; then
-    # 检查目录中是否有文件
-    FILES_COUNT=$(docker exec $NGINX_CONTAINER sh -c "find $CONTAINER_HTML_DIR -type f | wc -l")
-    if [ "$FILES_COUNT" -gt 0 ]; then
-        echo -e "${YELLOW}警告: 目录 $CONTAINER_HTML_DIR 已存在并包含 $FILES_COUNT 个文件${NC}"
-        echo -e "${YELLOW}此操作可能会覆盖现有文件，这可能影响其他网站${NC}"
-
-        read -p "是否继续？ (yes/no): " CONTINUE
-        if [[ "$CONTINUE" != "yes" && "$CONTINUE" != "y" ]]; then
-            echo -e "${RED}操作已取消${NC}"
-            echo -e "${YELLOW}请选择其他域名或手动清理目录${NC}"
-            exit 1
-        fi
-
-        # 创建备份
-        BACKUP_TIME=$(date +%Y%m%d%H%M%S)
-        BACKUP_DIR="${CONTAINER_HTML_DIR}_backup_${BACKUP_TIME}"
-        echo -e "${BLUE}创建现有内容的备份...${NC}"
-        docker exec $NGINX_CONTAINER sh -c "cp -a $CONTAINER_HTML_DIR $BACKUP_DIR"
-        echo -e "${GREEN}备份已创建: $BACKUP_DIR${NC}"
-    else
-        echo -e "${GREEN}目录存在但为空，可以安全地继续${NC}"
-    fi
-fi
 
 # 在Nginx容器内创建目录
 docker exec $NGINX_CONTAINER mkdir -p $CONTAINER_HTML_DIR
@@ -578,32 +368,16 @@ else
     echo -e "${YELLOW}请手动修复Nginx配置并重新加载${NC}"
 fi
 
-# 如果没有通配符证书，并且在Nginx容器中找到certbot，尝试获取证书
-if [ "$USE_WILDCARD" = false ]; then
-    echo -e "${BLUE}检查Certbot可用性...${NC}"
-    if docker exec $NGINX_CONTAINER which certbot &>/dev/null; then
-        echo -e "${GREEN}找到Certbot，尝试获取SSL证书...${NC}"
+# 启动爬虫后端
+echo -e "${BLUE}启动爬虫后端...${NC}"
+cd $INSTALL_DIR
+docker-compose up -d --build
 
-        # 提示用户输入邮箱地址
-        read -p "请输入您的邮箱地址 (用于Let's Encrypt通知): " EMAIL_ADDRESS
-
-        # 运行Certbot获取证书
-        CERTBOT_CMD="certbot --nginx -d $DOMAIN_NAME --agree-tos --email $EMAIL_ADDRESS --no-eff-email --redirect"
-        echo -e "${YELLOW}运行命令: $CERTBOT_CMD${NC}"
-
-        CERTBOT_OUTPUT=$(docker exec $NGINX_CONTAINER $CERTBOT_CMD 2>&1)
-
-        if echo "$CERTBOT_OUTPUT" | grep -q "Congratulations"; then
-            echo -e "${GREEN}成功获取SSL证书!${NC}"
-        else
-            echo -e "${YELLOW}获取SSL证书可能遇到问题:${NC}"
-            echo "$CERTBOT_OUTPUT"
-            echo -e "${YELLOW}您可能需要稍后手动配置SSL${NC}"
-        fi
-    else
-        echo -e "${YELLOW}未找到Certbot，跳过SSL证书配置${NC}"
-        echo -e "${YELLOW}您可以稍后手动配置SSL或使用Cloudflare等CDN服务启用HTTPS${NC}"
-    fi
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}爬虫后端构建并启动成功${NC}"
+else
+    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
+    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
 fi
 
 # 安装完成
@@ -612,17 +386,11 @@ echo -e "${GREEN}全息拉普拉斯互联网爬虫系统安装完成!${NC}"
 echo -e "${BLUE}==============================================${NC}"
 echo ""
 echo -e "您的爬虫系统现已安装在 ${YELLOW}$INSTALL_DIR${NC}"
-if [ "$USE_WILDCARD" = true ] || docker exec $NGINX_CONTAINER which certbot &>/dev/null; then
-    echo -e "前端界面可通过 ${YELLOW}https://$DOMAIN_NAME${NC} 访问"
-else
-    echo -e "前端界面可通过 ${YELLOW}http://$DOMAIN_NAME${NC} 访问"
-fi
+echo -e "前端界面可通过 ${YELLOW}http://$DOMAIN_NAME${NC} 访问"
 echo -e "确保您已经设置DNS记录，将 ${YELLOW}$DOMAIN_NAME${NC} 指向您的服务器IP"
 echo ""
-if [ "$USE_WILDCARD" = false ] && ! docker exec $NGINX_CONTAINER which certbot &>/dev/null; then
-    echo -e "${YELLOW}您的系统目前使用HTTP访问。如需HTTPS支持，请手动配置SSL证书${NC}"
-    echo -e "Nginx配置文件: ${YELLOW}/etc/nginx/conf.d/$DOMAIN_NAME.conf${NC}"
-fi
+echo -e "${YELLOW}如需配置HTTPS，您可以参考已有的配置文件:${NC}"
+echo -e "  例如: ${YELLOW}/etc/nginx/conf.d/bbs.newrin.link.conf${NC}"
 echo ""
 echo -e "${BLUE}系统管理命令:${NC}"
 echo -e "  启动: ${YELLOW}cd $INSTALL_DIR && docker-compose up -d${NC}"
