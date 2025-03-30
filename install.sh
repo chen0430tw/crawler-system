@@ -433,7 +433,24 @@ rm -rf $TMP_DIR
 
 echo -e "${GREEN}前端文件已复制到Nginx容器${NC}"
 
-# 检查Nginx配置
+# 先启动爬虫后端
+echo -e "${BLUE}启动爬虫后端...${NC}"
+cd $INSTALL_DIR
+docker-compose up -d --build
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}爬虫后端构建并启动成功${NC}"
+else
+    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
+    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
+    exit 1
+fi
+
+# 等待容器启动完成
+echo -e "${BLUE}等待爬虫后端启动完成...${NC}"
+sleep 5
+
+# 然后检查Nginx配置
 echo -e "${BLUE}验证Nginx配置...${NC}"
 NGINX_TEST=$(docker exec $NGINX_CONTAINER nginx -t 2>&1)
 
@@ -465,21 +482,42 @@ else
             echo -e "${RED}自动修复失败，请手动修复Nginx配置${NC}"
             echo -e "${YELLOW}可能需要检查以下文件: /etc/nginx/conf.d/$DOMAIN_NAME.conf${NC}"
         fi
+    # 检查是否存在upstream错误
+    elif echo "$NGINX_TEST" | grep -q "host not found in upstream"; then
+        echo -e "${YELLOW}检测到upstream解析错误，可能需要等待容器网络就绪...${NC}"
+        
+        # 再等待一段时间让Docker网络就绪
+        echo -e "${BLUE}等待Docker网络就绪...${NC}"
+        sleep 10
+        
+        # 再次验证配置
+        NGINX_TEST_RETRY=$(docker exec $NGINX_CONTAINER nginx -t 2>&1)
+        
+        if echo "$NGINX_TEST_RETRY" | grep -q "successful"; then
+            echo -e "${GREEN}网络就绪，Nginx配置验证通过${NC}"
+            docker exec $NGINX_CONTAINER nginx -s reload
+            echo -e "${GREEN}Nginx配置已重新加载${NC}"
+        else
+            echo -e "${RED}网络问题仍然存在${NC}"
+            
+            # 尝试重启Nginx容器以刷新网络缓存
+            echo -e "${YELLOW}尝试重启Nginx容器来刷新网络缓存...${NC}"
+            docker restart $NGINX_CONTAINER
+            sleep 5
+            
+            # 再次验证
+            NGINX_TEST_RETRY2=$(docker exec $NGINX_CONTAINER nginx -t 2>&1)
+            
+            if echo "$NGINX_TEST_RETRY2" | grep -q "successful"; then
+                echo -e "${GREEN}重启后Nginx配置验证通过${NC}"
+            else
+                echo -e "${RED}自动修复失败，请手动修复Nginx配置${NC}"
+                echo -e "${YELLOW}或者重启服务器后再次尝试${NC}"
+            fi
+        fi
     else
         echo -e "${RED}无法自动修复，请手动修复Nginx配置并重新加载${NC}"
     fi
-fi
-
-# 启动爬虫后端
-echo -e "${BLUE}启动爬虫后端...${NC}"
-cd $INSTALL_DIR
-docker-compose up -d --build
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}爬虫后端构建并启动成功${NC}"
-else
-    echo -e "${RED}爬虫后端启动失败，请检查日志${NC}"
-    echo -e "${YELLOW}您可以使用以下命令查看日志: cd $INSTALL_DIR && docker-compose logs${NC}"
 fi
 
 # 安装完成
