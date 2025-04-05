@@ -664,3 +664,179 @@ header.py-3.mb-4.border-bottom {
   max-height: 500px;     /* 限制容器最大高度 */
   overflow-y: auto;      /* 超出部分出现滚动条 */
 }
+
+/* 维基百科功能相关样式 */
+.wiki-page-item, .wiki-category-item {
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.wiki-page-item:hover, .wiki-category-item:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.wiki-page-item.active, .wiki-category-item.active {
+  background-color: rgba(13, 110, 253, 0.1);
+  border-left-color: #0d6efd;
+}
+
+.wiki-page-title, .wiki-category-title {
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wiki-page-url, .wiki-category-url {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wiki-page-container, .wiki-category-container {
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+}
+
+.wiki-page-header, .wiki-category-header {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.wiki-page-content {
+  max-height: 600px;
+  overflow-y: auto;
+  padding: 15px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+.keyword-cloud-fallback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 15px;
+}
+
+.keyword-cloud-item {
+  padding: 4px 8px;
+  background-color: rgba(13, 110, 253, 0.1);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.keyword-cloud-item:hover {
+  background-color: rgba(13, 110, 253, 0.2);
+  transform: scale(1.1);
+}
+
+.wiki-path-container {
+  padding: 15px;
+}
+
+.wiki-path {
+  padding: 15px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+.wiki-path-node {
+  display: flex;
+  align-items: start;
+  padding: 10px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  margin-bottom: 5px;
+}
+
+.wiki-path-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #0d6efd;
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-right: 10px;
+}
+
+.wiki-path-content {
+  flex-grow: 1;
+}
+
+.wiki-path-title {
+  font-weight: bold;
+}
+
+.wiki-path-url {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.wiki-path-connector {
+  display: flex;
+  justify-content: center;
+  padding: 5px 0;
+  color: #666;
+}
+
+.tree-node {
+  margin-bottom: 5px;
+}
+
+.tree-children {
+  margin-left: 20px;
+}
+
+.tree-page {
+  margin-left: 20px;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.structured-info {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.crawl-stats {
+  margin: 15px 0;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+}
+
+/* 修复隐藏的维基百科可视化容器 */
+#wiki-visualization-container {
+  min-height: 500px;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+  overflow: hidden;
+}
