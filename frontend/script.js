@@ -1840,4 +1840,3055 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshTaskList();
         });
     }
+
+// 1. 在现有的DOM加载事件中添加维基百科相关初始化
+    // 初始化维基百科功能
+    initWikipediaFunctions();
+    
+    // 如果是第一次访问，显示维基百科功能介绍
+    if (!localStorage.getItem('wikiFeatureIntroShown')) {
+        setTimeout(() => {
+            Swal.fire({
+                title: '新功能: 维基百科专用爬取',
+                html: `
+                    <div class="text-start">
+                        <p>全息拉普拉斯互联网爬虫系统现已添加维基百科专用爬取功能，包括:</p>
+                        <ul>
+                            <li>维基百科页面搜索与爬取</li>
+                            <li>分类爬取与分析</li>
+                            <li>页面关系可视化</li>
+                            <li>多语言版本支持</li>
+                        </ul>
+                        <p>点击导航栏中的"维基百科"标签页开始使用。</p>
+                    </div>
+                `,
+                icon: 'info',
+                confirmButtonText: '了解了'
+            });
+            
+            localStorage.setItem('wikiFeatureIntroShown', 'true');
+            initWikiVisualization, 1000;
+        }, 2000);
+    }
+
+// 2. 添加维基百科功能初始化函数
+function initWikipediaFunctions() {
+    // 获取维基百科标签页和内容区域
+    const wikiTab = document.getElementById('wiki-tab');
+    const wikiTabContent = document.getElementById('wiki');
+    
+    // 如果元素不存在，先创建维基百科标签页和内容区域
+    if (!wikiTab) {
+        createWikipediaTab();
+    }
+    
+    // 绑定维基百科搜索表单提交事件
+    const wikiSearchForm = document.getElementById('wiki-search-form');
+    if (wikiSearchForm) {
+        wikiSearchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const query = document.getElementById('wiki-search-input').value.trim();
+            if (query) {
+                searchWikipedia(query);
+            }
+        });
+    }
+    
+    // 绑定分类爬取表单提交事件
+    const wikiCategoryForm = document.getElementById('wiki-category-form');
+    if (wikiCategoryForm) {
+        wikiCategoryForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const category = document.getElementById('wiki-category-input').value.trim();
+            const depth = document.getElementById('wiki-category-depth').value;
+            if (category) {
+                crawlWikipediaCategory(category, depth);
+            }
+        });
+    }
+    
+    // 绑定随机页面按钮点击事件
+    const randomPagesBtn = document.getElementById('wiki-random-pages-btn');
+    if (randomPagesBtn) {
+        randomPagesBtn.addEventListener('click', function() {
+            const count = document.getElementById('wiki-random-count').value || 5;
+            getRandomWikipediaPages(count);
+        });
+    }
+    
+    // 初始化语言选择器
+    initWikiLanguageSelector();
+}
+
+// 3. 创建维基百科标签页和内容区域
+function createWikipediaTab() {
+    // 创建标签页导航项
+    const tabItem = document.createElement('li');
+    tabItem.className = 'nav-item';
+    tabItem.innerHTML = `<a class="nav-link" id="wiki-tab" data-bs-toggle="tab" href="#wiki">维基百科</a>`;
+    
+    // 添加到标签页导航
+    const resultTabs = document.getElementById('resultTabs');
+    if (resultTabs) {
+        resultTabs.appendChild(tabItem);
+    }
+    
+    // 创建标签页内容区域
+    const tabContent = document.createElement('div');
+    tabContent.className = 'tab-pane fade';
+    tabContent.id = 'wiki';
+    
+    // 创建维基百科内容
+    tabContent.innerHTML = `
+        <div class="row">
+            <div class="col-md-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" id="wikiSubTabs">
+                            <li class="nav-item">
+                                <a class="nav-link active" id="wiki-search-tab" data-bs-toggle="tab" href="#wiki-search">搜索</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="wiki-category-tab" data-bs-toggle="tab" href="#wiki-category">分类爬取</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="wiki-results-tab" data-bs-toggle="tab" href="#wiki-results">爬取结果</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="wiki-visualize-tab" data-bs-toggle="tab" href="#wiki-visualize">可视化</a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content">
+                            <!-- 搜索标签页 -->
+                            <div class="tab-pane fade show active" id="wiki-search">
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <div class="wiki-language-container mb-3">
+                                            <label for="wiki-language-selector" class="form-label">维基百科语言版本</label>
+                                            <select id="wiki-language-selector" class="form-select">
+                                                <option value="zh" selected>中文</option>
+                                                <option value="en">英文</option>
+                                                <option value="ja">日文</option>
+                                                <option value="ko">韩文</option>
+                                                <option value="fr">法文</option>
+                                                <option value="de">德文</option>
+                                                <option value="es">西班牙文</option>
+                                                <option value="ru">俄文</option>
+                                            </select>
+                                        </div>
+                                        <form id="wiki-search-form">
+                                            <div class="input-group">
+                                                <input type="text" id="wiki-search-input" class="form-control" placeholder="输入维基百科搜索关键词">
+                                                <button type="submit" class="btn btn-primary">搜索</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-12">
+                                        <div id="wiki-search-results">
+                                            <div class="text-center py-5">
+                                                <p class="text-muted">输入关键词搜索维基百科</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-12">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h5 class="mb-0">获取随机页面</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="input-group">
+                                                    <select id="wiki-random-count" class="form-select" style="max-width: 100px;">
+                                                        <option value="1">1页</option>
+                                                        <option value="3" selected>3页</option>
+                                                        <option value="5">5页</option>
+                                                        <option value="10">10页</option>
+                                                    </select>
+                                                    <button id="wiki-random-pages-btn" class="btn btn-secondary">获取随机页面</button>
+                                                </div>
+                                                <div id="wiki-random-results" class="mt-3">
+                                                    <!-- 随机页面结果将显示在这里 -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 分类爬取标签页 -->
+                            <div class="tab-pane fade" id="wiki-category">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <form id="wiki-category-form">
+                                            <div class="mb-3">
+                                                <label for="wiki-category-input" class="form-label">分类名称或URL</label>
+                                                <input type="text" id="wiki-category-input" class="form-control" placeholder="例如: Category:计算机科学 或 https://zh.wikipedia.org/wiki/Category:计算机科学">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="wiki-category-depth" class="form-label">爬取深度</label>
+                                                <select id="wiki-category-depth" class="form-select">
+                                                    <option value="0">0 (只爬取当前分类)</option>
+                                                    <option value="1" selected>1 (爬取当前分类和子分类)</option>
+                                                    <option value="2">2 (爬取到子分类的子分类)</option>
+                                                    <option value="3">3 (深度爬取，慎用)</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">筛选选项</label>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="wiki-filter-games" checked>
+                                                    <label class="form-check-label" for="wiki-filter-games">排除游戏相关内容</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="wiki-filter-wiki" checked>
+                                                    <label class="form-check-label" for="wiki-filter-wiki">排除维基百科自身相关内容</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="wiki-include-pages" checked>
+                                                    <label class="form-check-label" for="wiki-include-pages">包含页面内容(不仅爬取分类)</label>
+                                                </div>
+                                            </div>
+                                            <div class="d-grid gap-2">
+                                                <button type="submit" class="btn btn-primary">开始爬取</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div class="row mt-4">
+                                    <div class="col-md-12">
+                                        <div id="wiki-category-progress" class="d-none">
+                                            <h5>爬取进度</h5>
+                                            <div class="progress mb-3">
+                                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                            </div>
+                                            <div class="crawl-stats">
+                                                <div class="row">
+                                                    <div class="col-md-3">
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">分类页面:</div>
+                                                            <div class="stat-value" id="wiki-stat-categories">0</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">内容页面:</div>
+                                                            <div class="stat-value" id="wiki-stat-pages">0</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">待处理:</div>
+                                                            <div class="stat-value" id="wiki-stat-queue">0</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="stat-item">
+                                                            <div class="stat-label">用时:</div>
+                                                            <div class="stat-value" id="wiki-stat-time">0s</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="text-center mt-3">
+                                                <button id="wiki-cancel-crawl-btn" class="btn btn-danger">取消爬取</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 爬取结果标签页 -->
+                            <div class="tab-pane fade" id="wiki-results">
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-info-circle"></i> 这里显示最近的维基百科爬取任务结果
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div id="wiki-task-list">
+                                            <div class="text-center py-5">
+                                                <p class="text-muted">加载维基百科任务列表中...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-4">
+                                    <div class="col-md-12">
+                                        <div id="wiki-result-detail" class="d-none">
+                                            <h4 id="wiki-result-title">结果详情</h4>
+                                            <div class="result-stats mb-3">
+                                                <span class="badge bg-primary" id="wiki-result-categories">分类: 0</span>
+                                                <span class="badge bg-success" id="wiki-result-pages">页面: 0</span>
+                                                <span class="badge bg-info" id="wiki-result-time">用时: 0s</span>
+                                            </div>
+                                            <div class="result-actions mb-3">
+                                                <div class="btn-group">
+                                                    <button class="btn btn-outline-primary" id="wiki-download-json-btn">下载JSON</button>
+                                                    <button class="btn btn-outline-primary" id="wiki-download-csv-btn">下载CSV</button>
+                                                    <button class="btn btn-outline-primary" id="wiki-download-html-btn">下载HTML</button>
+                                                </div>
+                                            </div>
+                                            <div id="wiki-result-content">
+                                                <div class="text-center py-5">
+                                                    <p class="text-muted">选择一个任务查看详情</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 可视化标签页 -->
+                            <div class="tab-pane fade" id="wiki-visualize">
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-info-circle"></i> 可视化维基百科数据结构和关系
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h5 class="mb-0">分类树</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="mb-3">
+                                                    <label for="wiki-tree-root" class="form-label">根分类</label>
+                                                    <div class="input-group">
+                                                        <input type="text" id="wiki-tree-root" class="form-control" placeholder="例如: 计算机科学">
+                                                        <button id="wiki-tree-generate-btn" class="btn btn-primary">生成</button>
+                                                    </div>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="wiki-tree-include-pages" checked>
+                                                    <label class="form-check-label" for="wiki-tree-include-pages">包含页面</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h5 class="mb-0">页面关系</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="mb-3">
+                                                    <label for="wiki-path-source" class="form-label">源页面</label>
+                                                    <input type="text" id="wiki-path-source" class="form-control" placeholder="例如: 人工智能">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="wiki-path-target" class="form-label">目标页面</label>
+                                                    <input type="text" id="wiki-path-target" class="form-control" placeholder="例如: 机器学习">
+                                                </div>
+                                                <button id="wiki-path-find-btn" class="btn btn-primary">查找路径</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h5 class="mb-0">可视化结果</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="wiki-visualization-container" style="height: 600px;">
+                                                    <div class="text-center py-5">
+                                                        <p class="text-muted">从左侧选择可视化选项</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 添加到标签页内容区
+    const tabContainer = document.querySelector('.tab-content');
+    if (tabContainer) {
+        tabContainer.appendChild(tabContent);
+    }
+}
+
+// 4. 初始化维基百科语言选择器
+function initWikiLanguageSelector() {
+    // 获取语言选择器元素
+    const langSelector = document.getElementById('wiki-language-selector');
+    if (!langSelector) return;
+    
+    // 获取可用的维基百科语言列表
+    ApiClient.getWikiLanguages()
+        .then(languages => {
+            // 清空当前选项
+            langSelector.innerHTML = '';
+            
+            // 添加默认语言选项
+            const defaultLanguages = [
+                { code: 'zh', name: '中文' },
+                { code: 'en', name: '英文' },
+                { code: 'ja', name: '日文' },
+                { code: 'ko', name: '韩文' },
+                { code: 'fr', name: '法文' },
+                { code: 'de', name: '德文' },
+                { code: 'es', name: '西班牙文' },
+                { code: 'ru', name: '俄文' }
+            ];
+            
+            // 如果API返回了语言列表，使用API的数据
+            if (languages && languages.length > 0) {
+                languages.forEach(lang => {
+                    const option = document.createElement('option');
+                    option.value = lang.code;
+                    option.textContent = lang.name;
+                    langSelector.appendChild(option);
+                });
+                
+                // 设置默认选中语言为中文
+                langSelector.value = 'zh';
+            } else {
+                // 否则使用默认语言列表
+                defaultLanguages.forEach(lang => {
+                    const option = document.createElement('option');
+                    option.value = lang.code;
+                    option.textContent = lang.name;
+                    langSelector.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('获取维基百科语言列表失败:', error);
+            
+            // 发生错误时使用默认语言列表
+            const defaultLanguages = [
+                { code: 'zh', name: '中文' },
+                { code: 'en', name: '英文' },
+                { code: 'ja', name: '日文' },
+                { code: 'ko', name: '韩文' },
+                { code: 'fr', name: '法文' },
+                { code: 'de', name: '德文' },
+                { code: 'es', name: '西班牙文' },
+                { code: 'ru', name: '俄文' }
+            ];
+            
+            defaultLanguages.forEach(lang => {
+                const option = document.createElement('option');
+                option.value = lang.code;
+                option.textContent = lang.name;
+                langSelector.appendChild(option);
+            });
+        });
+}
+
+// 5. 搜索维基百科
+function searchWikipedia(query) {
+    // 获取搜索结果容器
+    const resultsContainer = document.getElementById('wiki-search-results');
+    if (!resultsContainer) return;
+    
+    // 获取选中的语言
+    const language = document.getElementById('wiki-language-selector').value || 'zh';
+    
+    // 显示加载中状态
+    resultsContainer.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-2">搜索中，请稍候...</p>
+        </div>
+    `;
+    
+    // 调用API搜索维基百科
+    ApiClient.searchWiki(query, { language: language, limit: 10 })
+        .then(results => {
+            // 如果没有结果
+            if (!results || results.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 未找到与"${query}"相关的结果
+                    </div>
+                `;
+                return;
+            }
+            
+            // 构建搜索结果HTML
+            let resultsHtml = `
+                <h5>搜索结果: "${query}"</h5>
+                <div class="list-group">
+            `;
+            
+            // 添加每个搜索结果
+            results.forEach(result => {
+                resultsHtml += `
+                    <div class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">${result.title}</h5>
+                            <small>ID: ${result.page_id}</small>
+                        </div>
+                        <p class="mb-1">${result.snippet || '无摘要'}</p>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <a href="${result.url}" target="_blank" class="btn btn-sm btn-outline-primary">查看原页面</a>
+                            <button class="btn btn-sm btn-primary fetch-wiki-page" data-url="${result.url}">抓取内容</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsHtml += `</div>`;
+            
+            // 添加获取所有结果的按钮
+            resultsHtml += `
+                <div class="text-center mt-3">
+                    <button id="fetch-all-results-btn" class="btn btn-success">抓取所有结果</button>
+                </div>
+            `;
+            
+            // 显示结果
+            resultsContainer.innerHTML = resultsHtml;
+            
+            // 绑定抓取按钮事件
+            document.querySelectorAll('.fetch-wiki-page').forEach(button => {
+                button.addEventListener('click', function() {
+                    const url = this.getAttribute('data-url');
+                    fetchWikipediaPage(url);
+                });
+            });
+            
+            // 绑定抓取所有结果按钮事件
+            document.getElementById('fetch-all-results-btn').addEventListener('click', function() {
+                fetchAllWikipediaResults(results);
+            });
+        })
+        .catch(error => {
+            resultsContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle"></i> 搜索失败: ${error.message || '未知错误'}
+                </div>
+            `;
+        });
+}
+
+// 6. 抓取单个维基百科页面
+function fetchWikipediaPage(url) {
+    // 显示提交中提示
+    Swal.fire({
+        title: '提交任务中',
+        text: '正在提交维基百科页面抓取任务，请稍候...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // 获取选中的语言
+    const language = document.getElementById('wiki-language-selector').value || 'zh';
+    
+    // 配置爬取任务
+    const config = {
+        type: 'wikipedia_page',
+        url: url,
+        language: language,
+        options: {
+            format: 'html'
+        }
+    };
+    
+    // 提交任务
+    ApiClient.submitWikiTask(config)
+        .then(response => {
+            Swal.close();
+            
+            // 显示任务已提交提示
+            Swal.fire({
+                icon: 'success',
+                title: '任务已提交',
+                text: `任务ID: ${response.task_id}`,
+                confirmButtonText: '查看任务状态'
+            }).then(() => {
+                // 切换到维基百科结果标签页
+                document.getElementById('wiki-results-tab').click();
+                
+                // 刷新任务列表
+                refreshWikiTaskList();
+            });
+        })
+        .catch(error => {
+            Swal.fire({
+                icon: 'error',
+                title: '提交失败',
+                text: error.message || '提交任务时发生错误'
+            });
+        });
+}
+
+// 7. 抓取所有搜索结果
+function fetchAllWikipediaResults(results) {
+    // 显示确认对话框
+    Swal.fire({
+        title: '确认抓取',
+        text: `确定要抓取所有 ${results.length} 个搜索结果吗？`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // 显示提交中提示
+            Swal.fire({
+                title: '提交任务中',
+                text: '正在提交批量抓取任务，请稍候...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // 获取选中的语言
+            const language = document.getElementById('wiki-language-selector').value || 'zh';
+            
+            // 提取URL列表
+            const urls = results.map(result => result.url);
+            
+            // 配置爬取任务
+            const config = {
+                type: 'wikipedia_batch',
+                urls: urls,
+                language: language,
+                options: {
+                    format: 'html',
+                    depth: 0  // 只抓取页面本身，不抓取链接
+                }
+            };
+            
+            // 提交任务
+            ApiClient.submitWikiTask(config)
+                .then(response => {
+                    Swal.close();
+                    
+                    // 显示任务已提交提示
+                    Swal.fire({
+                        icon: 'success',
+                        title: '批量任务已提交',
+                        text: `任务ID: ${response.task_id}`,
+                        confirmButtonText: '查看任务状态'
+                    }).then(() => {
+                        // 切换到维基百科结果标签页
+                        document.getElementById('wiki-results-tab').click();
+                        
+                        // 刷新任务列表
+                        refreshWikiTaskList();
+                    });
+                })
+                .catch(error => {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '提交失败',
+                        text: error.message || '提交任务时发生错误'
+                    });
+                });
+        }
+    });
+}
+
+// 8. 获取随机维基百科页面（继续）
+function getRandomWikipediaPages(count) {
+    // 获取随机页面结果容器
+    const resultsContainer = document.getElementById('wiki-random-results');
+    if (!resultsContainer) return;
+    
+    // 获取选中的语言
+    const language = document.getElementById('wiki-language-selector').value || 'zh';
+    
+    // 显示加载中状态
+    resultsContainer.innerHTML = `
+        <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <span class="ms-2">获取随机页面中...</span>
+        </div>
+    `;
+    
+    // 调用API获取随机维基百科页面
+    ApiClient.getRandomWikiPages({ count: count, language: language })
+        .then(pages => {
+            // 如果没有结果
+            if (!pages || pages.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 未能获取随机页面
+                    </div>
+                `;
+                return;
+            }
+            
+            // 构建结果HTML
+            let resultsHtml = `<div class="list-group">`;
+            
+            // 添加每个随机页面
+            pages.forEach(page => {
+                resultsHtml += `
+                    <div class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">${page.title}</h5>
+                            <small>ID: ${page.page_id}</small>
+                        </div>
+                        <p class="mb-1">${page.snippet || '无摘要'}</p>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <a href="${page.url}" target="_blank" class="btn btn-sm btn-outline-primary">查看原页面</a>
+                            <button class="btn btn-sm btn-primary fetch-wiki-page" data-url="${page.url}">抓取内容</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsHtml += `</div>`;
+            
+            // 添加批量抓取按钮
+            resultsHtml += `
+                <div class="text-center mt-3">
+                    <button id="fetch-all-random-btn" class="btn btn-success">抓取所有随机页面</button>
+                </div>
+            `;
+            
+            // 显示结果
+            resultsContainer.innerHTML = resultsHtml;
+            
+            // 绑定抓取按钮事件
+            document.querySelectorAll('#wiki-random-results .fetch-wiki-page').forEach(button => {
+                button.addEventListener('click', function() {
+                    const url = this.getAttribute('data-url');
+                    fetchWikipediaPage(url);
+                });
+            });
+            
+            // 绑定抓取所有随机页面按钮事件
+            document.getElementById('fetch-all-random-btn').addEventListener('click', function() {
+                fetchAllWikipediaResults(pages);
+            });
+        })
+        .catch(error => {
+            resultsContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle"></i> 获取随机页面失败: ${error.message || '未知错误'}
+                </div>
+            `;
+        });
+}
+
+// 9. 爬取维基百科分类
+function crawlWikipediaCategory(category, depth) {
+    // 获取分类爬取进度容器
+    const progressContainer = document.getElementById('wiki-category-progress');
+    if (!progressContainer) return;
+    
+    // 获取选中的语言
+    const language = document.getElementById('wiki-language-selector').value || 'zh';
+    
+    // 获取筛选选项
+    const filterGames = document.getElementById('wiki-filter-games').checked;
+    const filterWiki = document.getElementById('wiki-filter-wiki').checked;
+    const includePages = document.getElementById('wiki-include-pages').checked;
+    
+    // 显示进度容器
+    progressContainer.classList.remove('d-none');
+    
+    // 重置进度条和统计数据
+    const progressBar = progressContainer.querySelector('.progress-bar');
+    progressBar.style.width = '0%';
+    progressBar.setAttribute('aria-valuenow', 0);
+    
+    document.getElementById('wiki-stat-categories').textContent = '0';
+    document.getElementById('wiki-stat-pages').textContent = '0';
+    document.getElementById('wiki-stat-queue').textContent = '0';
+    document.getElementById('wiki-stat-time').textContent = '0s';
+    
+    // 开始计时
+    const startTime = new Date();
+    const updateTime = () => {
+        const elapsed = Math.floor((new Date() - startTime) / 1000);
+        document.getElementById('wiki-stat-time').textContent = `${elapsed}s`;
+    };
+    
+    // 定时更新时间
+    const timeInterval = setInterval(updateTime, 1000);
+    
+    // 准备爬取配置
+    let categoryName = category;
+    
+    // 如果输入是URL，提取分类名称
+    if (category.startsWith('http')) {
+        const urlParts = category.split('/');
+        categoryName = urlParts[urlParts.length - 1];
+        
+        // 处理URL编码
+        categoryName = decodeURIComponent(categoryName);
+    }
+    
+    // 如果不是以Category:开头，添加前缀
+    if (!categoryName.startsWith('Category:')) {
+        categoryName = `Category:${categoryName}`;
+    }
+    
+    // 配置爬取任务
+    const config = {
+        type: 'wikipedia_category',
+        category: categoryName,
+        language: language,
+        depth: parseInt(depth),
+        options: {
+            filter_games: filterGames,
+            filter_wiki: filterWiki,
+            include_pages: includePages,
+            format: 'html'
+        }
+    };
+    
+    // 显示提交中提示
+    Swal.fire({
+        title: '提交任务中',
+        text: '正在提交维基百科分类爬取任务，请稍候...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // 提交任务
+    ApiClient.submitWikiTask(config)
+        .then(response => {
+            Swal.close();
+            
+            const taskId = response.task_id;
+            
+            // 显示任务已提交提示
+            Swal.fire({
+                icon: 'success',
+                title: '任务已提交',
+                text: `维基百科分类爬取任务ID: ${taskId}`,
+                confirmButtonText: '监控进度'
+            }).then(() => {
+                // 开始监控任务进度
+                monitorWikiCategoryCrawlProgress(taskId, {
+                    progressBar,
+                    updateStats: (stats) => {
+                        if (stats.categories !== undefined) 
+                            document.getElementById('wiki-stat-categories').textContent = stats.categories;
+                        if (stats.pages !== undefined) 
+                            document.getElementById('wiki-stat-pages').textContent = stats.pages;
+                        if (stats.queue !== undefined) 
+                            document.getElementById('wiki-stat-queue').textContent = stats.queue;
+                    },
+                    onComplete: () => {
+                        clearInterval(timeInterval);
+                        
+                        // 显示完成提示
+                        Swal.fire({
+                            icon: 'success',
+                            title: '爬取完成',
+                            text: '维基百科分类爬取任务已完成',
+                            confirmButtonText: '查看结果'
+                        }).then(() => {
+                            // 切换到结果标签页
+                            document.getElementById('wiki-results-tab').click();
+                            
+                            // 刷新任务列表
+                            refreshWikiTaskList();
+                            
+                            // 加载当前任务结果
+                            loadWikiTaskResult(taskId);
+                        });
+                    },
+                    onError: (error) => {
+                        clearInterval(timeInterval);
+                        
+                        Swal.fire({
+                            icon: 'error',
+                            title: '爬取失败',
+                            text: `任务失败: ${error.message || '未知错误'}`,
+                            confirmButtonText: '确定'
+                        });
+                    }
+                });
+            });
+        })
+        .catch(error => {
+            clearInterval(timeInterval);
+            progressContainer.classList.add('d-none');
+            
+            Swal.fire({
+                icon: 'error',
+                title: '提交失败',
+                text: error.message || '提交任务时发生错误'
+            });
+        });
+    
+    // 绑定取消按钮事件
+    document.getElementById('wiki-cancel-crawl-btn').addEventListener('click', function() {
+        cancelWikiTask(config.task_id);
+        clearInterval(timeInterval);
+    });
+}
+
+// 10. 监控维基百科分类爬取进度
+function monitorWikiCategoryCrawlProgress(taskId, options) {
+    const { progressBar, updateStats, onComplete, onError } = options;
+    
+    // 定义进度轮询函数
+    const pollProgress = () => {
+        ApiClient.getWikiTaskStatus(taskId)
+            .then(response => {
+                // 更新进度条
+                const progress = response.progress || 0;
+                progressBar.style.width = `${progress}%`;
+                progressBar.setAttribute('aria-valuenow', progress);
+                
+                // 更新统计数据
+                if (response.details) {
+                    updateStats({
+                        categories: response.details.categories_count || 0,
+                        pages: response.details.pages_count || 0,
+                        queue: response.details.queue_size || 0
+                    });
+                }
+                
+                // 检查任务状态
+                if (response.status === '已完成') {
+                    // 任务完成
+                    if (onComplete) onComplete(response);
+                } else if (response.status === '失败') {
+                    // 任务失败
+                    if (onError) onError({ message: response.error || '任务执行失败' });
+                } else {
+                    // 任务仍在进行中，继续轮询
+                    setTimeout(pollProgress, 2000);
+                }
+            })
+            .catch(error => {
+                console.error('获取任务状态失败:', error);
+                // 出错后继续轮询，但延长间隔
+                setTimeout(pollProgress, 5000);
+            });
+    };
+    
+    // 开始轮询进度
+    pollProgress();
+}
+
+// 11. 取消维基百科任务
+function cancelWikiTask(taskId) {
+    if (!taskId) return;
+    
+    Swal.fire({
+        title: '确认取消',
+        text: '确定要取消这个维基百科爬取任务吗？',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '确定',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            ApiClient.cancelWikiTask(taskId)
+                .then(response => {
+                    Swal.fire({
+                        icon: 'success',
+                        title: '已取消',
+                        text: response.message || '任务已取消'
+                    });
+                    
+                    // 隐藏进度容器
+                    const progressContainer = document.getElementById('wiki-category-progress');
+                    if (progressContainer) {
+                        progressContainer.classList.add('d-none');
+                    }
+                    
+                    // 刷新任务列表
+                    refreshWikiTaskList();
+                })
+                .catch(error => {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '取消失败',
+                        text: error.message || '取消任务时发生错误'
+                    });
+                });
+        }
+    });
+}
+
+// 12. 刷新维基百科任务列表
+function refreshWikiTaskList() {
+    const taskListContainer = document.getElementById('wiki-task-list');
+    if (!taskListContainer) return;
+    
+    // 显示加载指示器
+    taskListContainer.innerHTML = `
+        <div class="text-center py-3">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-2">获取维基百科任务列表中...</p>
+        </div>
+    `;
+    
+    // 获取维基百科任务列表
+    ApiClient.getWikiTasks()
+        .then(tasks => {
+            if (!tasks || tasks.length === 0) {
+                taskListContainer.innerHTML = `
+                    <div class="text-center py-5">
+                        <p class="text-muted">暂无维基百科爬取任务</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 构建任务列表HTML
+            let html = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>类型</th>
+                                <th>状态</th>
+                                <th>进度</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            // 添加每个任务行
+            tasks.forEach(task => {
+                const taskId = task.id;
+                const shortId = taskId.substring(0, 8) + '...';
+                
+                // 根据状态设置不同的样式
+                let statusClass = '';
+                let progressHtml = '';
+                
+                switch (task.status) {
+                    case '运行中':
+                        statusClass = 'text-primary';
+                        progressHtml = `
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                    role="progressbar" style="width: ${task.progress}%;" 
+                                    aria-valuenow="${task.progress}" aria-valuemin="0" aria-valuemax="100">
+                                    ${task.progress}%
+                                </div>
+                            </div>
+                        `;
+                        break;
+                    case '已完成':
+                        statusClass = 'text-success';
+                        progressHtml = `
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-success" 
+                                    role="progressbar" style="width: 100%;" 
+                                    aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                                    100%
+                                </div>
+                            </div>
+                        `;
+                        break;
+                    case '失败':
+                        statusClass = 'text-danger';
+                        progressHtml = '<span class="badge bg-danger">失败</span>';
+                        break;
+                    case '等待中':
+                        statusClass = 'text-warning';
+                        progressHtml = '<span class="badge bg-warning">等待中</span>';
+                        break;
+                    default:
+                        progressHtml = `<span>${task.progress}%</span>`;
+                }
+                
+                // 任务类型
+                let taskType = '';
+                if (task.details && task.details.type) {
+                    switch (task.details.type) {
+                        case 'wikipedia_page':
+                            taskType = '单页面爬取';
+                            break;
+                        case 'wikipedia_batch':
+                            taskType = '批量页面爬取';
+                            break;
+                        case 'wikipedia_category':
+                            taskType = '分类爬取';
+                            break;
+                        default:
+                            taskType = task.details.type;
+                    }
+                }
+                
+                // 创建时间
+                const createdAt = new Date(task.created_at).toLocaleString();
+                
+                // 操作按钮
+                let actionButtons = '';
+                
+                if (task.status === '已完成') {
+                    actionButtons = `
+                        <button class="btn btn-sm btn-primary view-wiki-result-btn" data-task-id="${taskId}">查看结果</button>
+                        <button class="btn btn-sm btn-success download-wiki-result-btn" data-task-id="${taskId}">下载结果</button>
+                    `;
+                } else if (task.status === '等待中') {
+                    actionButtons = `
+                        <button class="btn btn-sm btn-danger cancel-wiki-task-btn" data-task-id="${taskId}">取消任务</button>
+                    `;
+                } else if (task.status === '失败') {
+                    actionButtons = `
+                        <button class="btn btn-sm btn-info wiki-task-error-btn" data-task-id="${taskId}">查看错误</button>
+                    `;
+                } else {
+                    actionButtons = `
+                        <button class="btn btn-sm btn-info wiki-task-details-btn" data-task-id="${taskId}">查看详情</button>
+                    `;
+                }
+                
+                html += `
+                    <tr id="wiki-task-row-${taskId}">
+                        <td title="${taskId}">${shortId}</td>
+                        <td>${taskType}</td>
+                        <td class="${statusClass}">${task.status}</td>
+                        <td>${progressHtml}</td>
+                        <td>${createdAt}</td>
+                        <td>${actionButtons}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-center mt-3">
+                    <button id="refresh-wiki-tasks-btn" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新列表
+                    </button>
+                </div>
+            `;
+            
+            // 显示任务列表
+            taskListContainer.innerHTML = html;
+            
+            // 绑定按钮事件
+            bindWikiTaskButtonEvents();
+        })
+        .catch(error => {
+            taskListContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle"></i> 获取任务列表失败: ${error.message || '未知错误'}
+                </div>
+                <div class="text-center mt-3">
+                    <button id="refresh-wiki-tasks-btn" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新列表
+                    </button>
+                </div>
+            `;
+            
+            // 绑定刷新按钮事件
+            const refreshBtn = document.getElementById('refresh-wiki-tasks-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', refreshWikiTaskList);
+            }
+        });
+}
+
+// 13. 绑定维基百科任务按钮事件
+function bindWikiTaskButtonEvents() {
+    // 绑定查看结果按钮事件
+    document.querySelectorAll('.view-wiki-result-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const taskId = this.getAttribute('data-task-id');
+            loadWikiTaskResult(taskId);
+        });
+    });
+    
+    // 绑定下载结果按钮事件
+    document.querySelectorAll('.download-wiki-result-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const taskId = this.getAttribute('data-task-id');
+            downloadWikiTaskResult(taskId);
+        });
+    });
+    
+    // 绑定取消任务按钮事件
+    document.querySelectorAll('.cancel-wiki-task-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const taskId = this.getAttribute('data-task-id');
+            cancelWikiTask(taskId);
+        });
+    });
+    
+    // 绑定查看错误按钮事件
+    document.querySelectorAll('.wiki-task-error-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const taskId = this.getAttribute('data-task-id');
+            showWikiTaskError(taskId);
+        });
+    });
+    
+    // 绑定查看详情按钮事件
+    document.querySelectorAll('.wiki-task-details-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const taskId = this.getAttribute('data-task-id');
+            showWikiTaskDetails(taskId);
+        });
+    });
+    
+    // 绑定刷新按钮事件
+    const refreshBtn = document.getElementById('refresh-wiki-tasks-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', refreshWikiTaskList);
+    }
+}
+
+// 14. 加载维基百科任务结果
+function loadWikiTaskResult(taskId) {
+    // 获取结果详情容器
+    const resultDetail = document.getElementById('wiki-result-detail');
+    const resultContent = document.getElementById('wiki-result-content');
+    if (!resultDetail || !resultContent) return;
+    
+    // 显示详情区域
+    resultDetail.classList.remove('d-none');
+    
+    // 显示加载中状态
+    resultContent.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-2">加载维基百科爬取结果中...</p>
+        </div>
+    `;
+    
+    // 获取任务结果
+    ApiClient.getWikiTaskResult(taskId)
+        .then(result => {
+            // 更新结果标题和统计
+            document.getElementById('wiki-result-title').textContent = `爬取结果: ${result.task_info?.title || '维基百科内容'}`;
+            document.getElementById('wiki-result-categories').textContent = `分类: ${result.statistics?.categories_count || 0}`;
+            document.getElementById('wiki-result-pages').textContent = `页面: ${result.statistics?.pages_count || 0}`;
+            document.getElementById('wiki-result-time').textContent = `用时: ${result.task_info?.duration?.toFixed(2) || 0}s`;
+            
+            // 绑定下载按钮事件
+            document.getElementById('wiki-download-json-btn').addEventListener('click', function() {
+                downloadWikiTaskResult(taskId, 'json');
+            });
+            
+            document.getElementById('wiki-download-csv-btn').addEventListener('click', function() {
+                downloadWikiTaskResult(taskId, 'csv');
+            });
+            
+            document.getElementById('wiki-download-html-btn').addEventListener('click', function() {
+                downloadWikiTaskResult(taskId, 'html');
+            });
+            
+            // 显示结果内容
+            displayWikiResult(result, resultContent);
+        })
+        .catch(error => {
+            resultContent.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle"></i> 加载结果失败: ${error.message || '未知错误'}
+                </div>
+            `;
+        });
+}
+
+// 15. 显示维基百科结果内容
+function displayWikiResult(result, container) {
+    if (!result || !result.content || !Array.isArray(result.content)) {
+        container.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i> 未找到有效的爬取结果内容
+            </div>
+        `;
+        return;
+    }
+    
+    // 创建分类和内容显示区域
+    let html = `
+        <div class="wiki-result-container">
+            <ul class="nav nav-tabs" id="wikiResultTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="wiki-content-tab" data-bs-toggle="tab" data-bs-target="#wiki-content-tab-pane" type="button" role="tab" aria-controls="wiki-content-tab-pane" aria-selected="true">内容页面</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="wiki-categories-tab" data-bs-toggle="tab" data-bs-target="#wiki-categories-tab-pane" type="button" role="tab" aria-controls="wiki-categories-tab-pane" aria-selected="false">分类页面</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="wiki-analysis-tab" data-bs-toggle="tab" data-bs-target="#wiki-analysis-tab-pane" type="button" role="tab" aria-controls="wiki-analysis-tab-pane" aria-selected="false">数据分析</button>
+                </li>
+            </ul>
+            
+            <div class="tab-content" id="wikiResultTabContent">
+                <!-- 内容页面 -->
+                <div class="tab-pane fade show active" id="wiki-content-tab-pane" role="tabpanel" aria-labelledby="wiki-content-tab" tabindex="0">
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="list-group wiki-page-list">
+    `;
+    
+    // 筛选并添加内容页面
+    const contentPages = result.content.filter(item => !item.url.includes('Category:') && !item.url.includes('Special:'));
+    
+    if (contentPages.length === 0) {
+        html += `
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> 未找到内容页面
+                                </div>
+        `;
+    } else {
+        contentPages.forEach((item, index) => {
+            html += `
+                                <a href="#" class="list-group-item list-group-item-action wiki-page-item" data-index="${index}" data-type="content">
+                                    <div class="wiki-page-title">${item.title || '无标题'}</div>
+                                    <div class="wiki-page-url">${item.url}</div>
+                                </a>
+            `;
+        });
+    }
+    
+    html += `
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div id="wiki-page-preview">
+                                <div class="text-center py-5">
+                                    <p class="text-muted">选择左侧页面查看内容</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 分类页面 -->
+                <div class="tab-pane fade" id="wiki-categories-tab-pane" role="tabpanel" aria-labelledby="wiki-categories-tab" tabindex="0">
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="list-group wiki-category-list">
+    `;
+    
+    // 筛选并添加分类页面
+    const categoryPages = result.content.filter(item => item.url.includes('Category:'));
+    
+    if (categoryPages.length === 0) {
+        html += `
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> 未找到分类页面
+                                </div>
+        `;
+    } else {
+        categoryPages.forEach((item, index) => {
+            html += `
+                                <a href="#" class="list-group-item list-group-item-action wiki-page-item" data-index="${index}" data-type="category">
+                                    <div class="wiki-page-title">${item.title || '无标题'}</div>
+                                    <div class="wiki-page-url">${item.url}</div>
+                                </a>
+            `;
+        });
+    }
+    
+    html += `
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div id="wiki-category-preview">
+                                <div class="text-center py-5">
+                                    <p class="text-muted">选择左侧分类查看内容</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 数据分析 -->
+                <div class="tab-pane fade" id="wiki-analysis-tab-pane" role="tabpanel" aria-labelledby="wiki-analysis-tab" tabindex="0">
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h5 class="mb-0">内容统计</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <canvas id="wikiContentTypeChart"></canvas>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="stats-table">
+                                                <div class="stats-row">
+                                                    <div class="stats-label">总页面数:</div>
+                                                    <div class="stats-value">${result.content.length}</div>
+                                                </div>
+                                                <div class="stats-row">
+                                                    <div class="stats-label">内容页面:</div>
+                                                    <div class="stats-value">${contentPages.length}</div>
+                                                </div>
+                                                    <div class="stats-row">
+                                                    <div class="stats-label">分类页面:</div>
+                                                    <div class="stats-value">${categoryPages.length}</div>
+                                                </div>
+                                                <div class="stats-row">
+                                                    <div class="stats-label">特殊页面:</div>
+                                                    <div class="stats-value">${result.content.filter(item => item.url.includes('Special:')).length}</div>
+                                                </div>
+                                                <div class="stats-row">
+                                                    <div class="stats-label">平均内容长度:</div>
+                                                    <div class="stats-value">${Math.round(contentPages.reduce((sum, item) => sum + (item.content ? item.content.length : 0), 0) / Math.max(1, contentPages.length))} 字符</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h5 class="mb-0">关键词分析</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="wikiKeywordsCloud" style="height: 300px;"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">链接关系</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="text-center mb-3">
+                                        <button id="generate-wiki-graph-btn" class="btn btn-primary">生成关系图谱</button>
+                                    </div>
+                                    <div id="wikiLinkGraph" style="height: 400px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 显示结果内容
+    container.innerHTML = html;
+    
+    // 保存结果数据，用于后续展示
+    container.dataset.resultData = JSON.stringify(result);
+    
+    // 绑定页面项目点击事件
+    document.querySelectorAll('.wiki-page-item').forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // 更新选中状态
+            document.querySelectorAll('.wiki-page-item').forEach(el => {
+                el.classList.remove('active');
+            });
+            this.classList.add('active');
+            
+            // 获取页面索引和类型
+            const index = parseInt(this.getAttribute('data-index'));
+            const type = this.getAttribute('data-type');
+            
+            // 显示页面内容
+            const resultData = JSON.parse(container.dataset.resultData);
+            
+            if (type === 'content') {
+                displayWikiPageContent(contentPages[index], 'wiki-page-preview');
+            } else if (type === 'category') {
+                displayWikiCategoryContent(categoryPages[index], 'wiki-category-preview');
+            }
+        });
+    });
+    
+    // 绑定生成图谱按钮事件
+    const graphBtn = document.getElementById('generate-wiki-graph-btn');
+    if (graphBtn) {
+        graphBtn.addEventListener('click', function() {
+            generateWikiLinkGraph(result);
+        });
+    }
+    
+    // 渲染内容类型饼图
+    renderWikiContentTypeChart(result);
+    
+    // 渲染关键词云
+    renderWikiKeywordsCloud(result);
+}
+
+// 16. 显示维基百科页面内容
+function displayWikiPageContent(page, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !page) return;
+    
+    let contentHtml = '';
+    
+    // 处理HTML内容
+    if (page.content && page.content.includes('<')) {
+        // 是HTML内容，需要进行安全处理
+        const sanitizedHtml = sanitizeHtml(page.content);
+        
+        contentHtml = `
+            <div class="wiki-page-container">
+                <h4 class="wiki-page-header">${page.title || '无标题'}</h4>
+                <div class="wiki-page-url mb-3">
+                    <a href="${page.url}" target="_blank">${page.url}</a>
+                </div>
+                <div class="keywords-container mb-3">
+                    ${page.keywords && page.keywords.length > 0 ? 
+                        page.keywords.map(kw => `<span class="keyword">${kw}</span>`).join('') : 
+                        '<span class="text-muted">无关键词</span>'}
+                </div>
+                <div class="wiki-page-actions mb-3">
+                    <button class="btn btn-sm btn-outline-primary extract-wiki-page-btn" data-url="${page.url}">提取结构化信息</button>
+                    <button class="btn btn-sm btn-outline-secondary download-wiki-page-btn" data-url="${page.url}">下载页面</button>
+                </div>
+                <div class="wiki-page-content">
+                    ${sanitizedHtml}
+                </div>
+            </div>
+        `;
+    } else {
+        // 纯文本内容
+        contentHtml = `
+            <div class="wiki-page-container">
+                <h4 class="wiki-page-header">${page.title || '无标题'}</h4>
+                <div class="wiki-page-url mb-3">
+                    <a href="${page.url}" target="_blank">${page.url}</a>
+                </div>
+                <div class="keywords-container mb-3">
+                    ${page.keywords && page.keywords.length > 0 ? 
+                        page.keywords.map(kw => `<span class="keyword">${kw}</span>`).join('') : 
+                        '<span class="text-muted">无关键词</span>'}
+                </div>
+                <div class="wiki-page-actions mb-3">
+                    <button class="btn btn-sm btn-outline-primary extract-wiki-page-btn" data-url="${page.url}">提取结构化信息</button>
+                    <button class="btn btn-sm btn-outline-secondary download-wiki-page-btn" data-url="${page.url}">下载页面</button>
+                </div>
+                <div class="wiki-page-content">
+                    <pre>${page.content || '无内容'}</pre>
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = contentHtml;
+    
+    // 绑定提取结构化信息按钮事件
+    container.querySelector('.extract-wiki-page-btn').addEventListener('click', function() {
+        const url = this.getAttribute('data-url');
+        extractWikiPageStructuredInfo(url, page);
+    });
+    
+    // 绑定下载页面按钮事件
+    container.querySelector('.download-wiki-page-btn').addEventListener('click', function() {
+        const url = this.getAttribute('data-url');
+        downloadWikiPage(url, page);
+    });
+}
+
+// 17. 显示维基百科分类内容
+function displayWikiCategoryContent(category, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !category) return;
+    
+    // 查找分类下的子分类和页面链接
+    let subCategories = [];
+    let pages = [];
+    
+    // 简单解析HTML内容提取链接
+    if (category.content && category.content.includes('<')) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = category.content;
+        
+        // 查找子分类
+        const categoryLinksDiv = tempDiv.querySelector('#mw-subcategories');
+        if (categoryLinksDiv) {
+            const categoryLinks = categoryLinksDiv.querySelectorAll('a');
+            categoryLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.includes('Category:')) {
+                    subCategories.push({
+                        title: link.textContent,
+                        url: 'https://' + category.url.split('/')[2] + href
+                    });
+                }
+            });
+        }
+        
+        // 查找页面
+        const pagesDiv = tempDiv.querySelector('#mw-pages');
+        if (pagesDiv) {
+            const pageLinks = pagesDiv.querySelectorAll('a');
+            pageLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.includes('/wiki/') && !href.includes(':')) {
+                    pages.push({
+                        title: link.textContent,
+                        url: 'https://' + category.url.split('/')[2] + href
+                    });
+                }
+            });
+        }
+    }
+    
+    // 构建分类内容HTML
+    let contentHtml = `
+        <div class="wiki-category-container">
+            <h4 class="wiki-category-header">${category.title || '无标题'}</h4>
+            <div class="wiki-category-url mb-3">
+                <a href="${category.url}" target="_blank">${category.url}</a>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">子分类 (${subCategories.length})</h5>
+                        </div>
+                        <div class="card-body">
+                            ${subCategories.length > 0 ? 
+                                `<div class="list-group">
+                                    ${subCategories.map(cat => `
+                                        <a href="${cat.url}" target="_blank" class="list-group-item list-group-item-action">
+                                            <i class="bi bi-folder"></i> ${cat.title}
+                                        </a>
+                                    `).join('')}
+                                </div>` : 
+                                '<div class="text-muted">无子分类</div>'}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">页面 (${pages.length})</h5>
+                        </div>
+                        <div class="card-body">
+                            ${pages.length > 0 ? 
+                                `<div class="list-group">
+                                    ${pages.map(page => `
+                                        <a href="${page.url}" target="_blank" class="list-group-item list-group-item-action">
+                                            <i class="bi bi-file-text"></i> ${page.title}
+                                        </a>
+                                    `).join('')}
+                                </div>` : 
+                                '<div class="text-muted">无页面</div>'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">分类操作</h5>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-primary crawl-sub-categories-btn" data-category="${category.title}">爬取子分类</button>
+                    <button class="btn btn-outline-primary crawl-pages-btn" data-category="${category.title}">爬取页面</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = contentHtml;
+    
+    // 绑定爬取子分类按钮事件
+    container.querySelector('.crawl-sub-categories-btn').addEventListener('click', function() {
+        const categoryName = this.getAttribute('data-category');
+        document.getElementById('wiki-category-tab').click();
+        document.getElementById('wiki-category-input').value = categoryName;
+        document.getElementById('wiki-category-depth').value = "1";
+    });
+    
+    // 绑定爬取页面按钮事件
+    container.querySelector('.crawl-pages-btn').addEventListener('click', function() {
+        const categoryName = this.getAttribute('data-category');
+        // 将所有页面URL添加到爬取配置
+        const urls = pages.map(page => page.url);
+        if (urls.length > 0) {
+            // 前往主界面的URL输入区
+            document.getElementById('urlInput').value = urls.join('\n');
+            document.getElementById('resultTabs').querySelector('a[href="#upload"]').click();
+            
+            // 显示提示
+            Swal.fire({
+                icon: 'success',
+                title: '页面已添加',
+                text: `已将 ${urls.length} 个页面添加到URL列表，您可以点击"运行爬虫"开始抓取`,
+                confirmButtonText: '确定'
+            });
+        } else {
+            Swal.fire({
+                icon: 'info',
+                title: '无页面',
+                text: '当前分类下没有页面可供爬取',
+                confirmButtonText: '确定'
+            });
+        }
+    });
+}
+
+// 18. 提取维基百科页面结构化信息
+function extractWikiPageStructuredInfo(url, page) {
+    Swal.fire({
+        title: '提取中',
+        text: '正在提取页面结构化信息，请稍候...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // 调用API提取结构化信息
+    ApiClient.extractWikiStructuredInfo(url)
+        .then(result => {
+            Swal.close();
+            
+            // 显示结构化信息
+            Swal.fire({
+                title: '结构化信息',
+                html: generateStructuredInfoHtml(result),
+                width: 800,
+                confirmButtonText: '关闭',
+                showCloseButton: true
+            });
+        })
+        .catch(error => {
+            Swal.fire({
+                icon: 'error',
+                title: '提取失败',
+                text: error.message || '提取结构化信息时发生错误',
+                confirmButtonText: '确定'
+            });
+        });
+    
+    // 生成结构化信息HTML
+    function generateStructuredInfoHtml(data) {
+        if (!data) return '<div class="alert alert-warning">未能提取到结构化信息</div>';
+        
+        let html = `<div class="structured-info">`;
+        
+        // 添加Infobox信息
+        if (data.infobox && Object.keys(data.infobox).length > 0) {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">信息框 (Infobox)</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm table-striped mb-0">
+                            <tbody>
+            `;
+            
+            for (const [key, value] of Object.entries(data.infobox)) {
+                html += `
+                    <tr>
+                        <td class="fw-bold" style="width: 30%;">${key}</td>
+                        <td>${typeof value === 'string' ? value : JSON.stringify(value)}</td>
+                    </tr>
+                `;
+            }
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 添加分类信息
+        if (data.categories && data.categories.length > 0) {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">分类</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap">
+            `;
+            
+            data.categories.forEach(category => {
+                html += `<span class="badge bg-secondary me-2 mb-2">${category}</span>`;
+            });
+            
+            html += `
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 添加段落信息
+        if (data.sections && data.sections.length > 0) {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">内容结构</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush">
+            `;
+            
+            data.sections.forEach(section => {
+                html += `
+                    <li class="list-group-item">
+                        <div class="fw-bold">${section.title || '引言'}</div>
+                        <div class="text-muted small">${section.paragraphs.length} 个段落</div>
+                    </li>
+                `;
+            });
+            
+            html += `
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 添加链接信息
+        if (data.links && data.links.length > 0) {
+            html += `
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">主要链接</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+            `;
+            
+            // 显示前20个链接
+            const displayLinks = data.links.slice(0, 20);
+            displayLinks.forEach(link => {
+                html += `
+                    <div class="col-md-6 mb-2">
+                        <a href="${link.url}" target="_blank" class="text-truncate d-inline-block" style="max-width: 100%;">
+                            ${link.text || link.url}
+                        </a>
+                    </div>
+                `;
+            });
+            
+            html += `
+                        </div>
+                        ${data.links.length > 20 ? `<div class="text-muted small mt-2">显示 ${displayLinks.length} / ${data.links.length} 个链接</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        html += `</div>`;
+        
+        return html;
+    }
+}
+
+// 19. 下载维基百科页面
+function downloadWikiPage(url, page) {
+    if (!page || !page.content) {
+        Swal.fire({
+            icon: 'error',
+            title: '下载失败',
+            text: '页面内容为空',
+            confirmButtonText: '确定'
+        });
+        return;
+    }
+    
+    // 格式化文件名
+    const filename = (page.title || 'wiki_page').replace(/[^\w\s]/gi, '').replace(/\s+/g, '_') + '.html';
+    
+    // 创建完整的HTML文档
+    let fullHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>${page.title || '维基百科页面'}</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
+                a { color: #0645ad; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+                .metadata { background: #f8f9fa; padding: 10px; border: 1px solid #ddd; margin-bottom: 20px; }
+                .metadata p { margin: 5px 0; }
+                .keywords { margin-top: 10px; }
+                .keyword { display: inline-block; background: #e0f0ff; padding: 2px 8px; border-radius: 12px; margin-right: 5px; font-size: 0.9em; }
+            </style>
+        </head>
+        <body>
+            <div class="metadata">
+                <h1>${page.title || '无标题'}</h1>
+                <p><strong>URL:</strong> <a href="${page.url}">${page.url}</a></p>
+                <p><strong>爬取时间:</strong> ${new Date().toLocaleString()}</p>
+                ${page.keywords && page.keywords.length > 0 ? 
+                    `<div class="keywords">
+                        <strong>关键词:</strong> 
+                        ${page.keywords.map(kw => `<span class="keyword">${kw}</span>`).join('')}
+                    </div>` : ''}
+            </div>
+            <div class="content">
+                ${page.content}
+            </div>
+        </body>
+        </html>
+    `;
+    
+    // 创建并下载Blob
+    const blob = new Blob([fullHtml], {type: 'text/html'});
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    
+    // 清理
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+}
+
+// 20. 下载维基百科任务结果
+function downloadWikiTaskResult(taskId, format = 'json') {
+    // 获取下载链接
+    const downloadUrl = ApiClient.getWikiDownloadLink(taskId, format);
+    
+    // 创建临时链接并点击
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.target = '_blank';
+    a.download = `wiki_result_${taskId.substring(0, 8)}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // 清理
+    setTimeout(() => {
+        document.body.removeChild(a);
+    }, 100);
+}
+
+// 21. 显示维基百科任务错误
+function showWikiTaskError(taskId) {
+    ApiClient.getWikiTaskStatus(taskId)
+        .then(task => {
+            if (task.error) {
+                Swal.fire({
+                    title: '任务错误',
+                    html: `<div class="text-danger">${task.error}</div>
+                          ${task.traceback ? `<div class="mt-3"><strong>错误详情:</strong>
+                          <pre class="text-start bg-light p-2 mt-2" style="max-height: 300px; overflow-y: auto;">${task.traceback}</pre></div>` : ''}`,
+                    width: 800,
+                    confirmButtonText: '关闭'
+                });
+            } else {
+                Swal.fire({
+                    icon: 'info',
+                    title: '无错误信息',
+                    text: '未找到此任务的错误信息',
+                    confirmButtonText: '确定'
+                });
+            }
+        })
+        .catch(error => {
+            Swal.fire({
+                icon: 'error',
+                title: '获取错误信息失败',
+                text: error.message || '获取任务错误信息时发生错误',
+                confirmButtonText: '确定'
+            });
+        });
+}
+
+// 22. 显示维基百科任务详情
+function showWikiTaskDetails(taskId) {
+    ApiClient.getWikiTaskStatus(taskId)
+        .then(task => {
+            const details = task.details || {};
+            const htmlContent = `
+                <div class="task-details">
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>任务ID:</strong></div>
+                        <div class="col-6 text-start">${task.id}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>任务类型:</strong></div>
+                        <div class="col-6 text-start">${details.type || '未知'}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>状态:</strong></div>
+                        <div class="col-6 text-start">${task.status}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>进度:</strong></div>
+                        <div class="col-6 text-start">${task.progress}%</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>语言版本:</strong></div>
+                        <div class="col-6 text-start">${details.language || 'zh'}</div>
+                    </div>
+                    ${details.category ? `
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>爬取分类:</strong></div>
+                        <div class="col-6 text-start">${details.category}</div>
+                    </div>
+                    ` : ''}
+                    ${details.depth !== undefined ? `
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>爬取深度:</strong></div>
+                        <div class="col-6 text-start">${details.depth}</div>
+                    </div>
+                    ` : ''}
+                    ${details.categories_count !== undefined ? `
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>分类数量:</strong></div>
+                        <div class="col-6 text-start">${details.categories_count}</div>
+                    </div>
+                    ` : ''}
+                    ${details.pages_count !== undefined ? `
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>页面数量:</strong></div>
+                        <div class="col-6 text-start">${details.pages_count}</div>
+                    </div>
+                    ` : ''}
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>创建时间:</strong></div>
+                        <div class="col-6 text-start">${task.created_at ? new Date(task.created_at).toLocaleString() : '-'}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>开始时间:</strong></div>
+                        <div class="col-6 text-start">${task.start_time ? new Date(task.start_time).toLocaleString() : '-'}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6 text-start"><strong>结束时间:</strong></div>
+                        <div class="col-6 text-start">${task.end_time ? new Date(task.end_time).toLocaleString() : '-'}</div>
+                    </div>
+                </div>
+            `;
+            
+            Swal.fire({
+                title: '任务详情',
+                html: htmlContent,
+                width: 600,
+                confirmButtonText: '关闭'
+            });
+        })
+        .catch(error => {
+            Swal.fire({
+                icon: 'error',
+                title: '获取任务详情失败',
+                text: error.message || '获取任务详情时发生错误',
+                confirmButtonText: '确定'
+            });
+        });
+}
+
+// 23. 渲染维基百科内容类型饼图
+function renderWikiContentTypeChart(result) {
+    if (!window.Chart) {
+        console.error('Chart.js未加载');
+        return;
+    }
+    
+    // 获取画布上下文
+    const ctx = document.getElementById('wikiContentTypeChart');
+    if (!ctx) return;
+    
+    // 计算内容类型计数
+    const contentPages = result.content.filter(item => !item.url.includes('Category:') && !item.url.includes('Special:'));
+    const categoryPages = result.content.filter(item => item.url.includes('Category:'));
+    const specialPages = result.content.filter(item => item.url.includes('Special:'));
+    
+    // 创建图表实例
+    const chart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['内容页面', '分类页面', '特殊页面'],
+            datasets: [{
+                data: [contentPages.length, categoryPages.length, specialPages.length],
+                backgroundColor: [
+                    '#36a2eb',  // 蓝色 - 内容页面
+                    '#ff6384',  // 红色 - 分类页面
+                    '#ffcd56'   // 黄色 - 特殊页面
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                }
+            }
+        }
+    });
+    
+    // 保存图表实例以便后续更新
+    window.wikiContentTypeChart = chart;
+}
+
+// 24. 渲染维基百科关键词云（继续）
+function renderWikiKeywordsCloud(result) {
+    // 获取容器
+    const container = document.getElementById('wikiKeywordsCloud');
+    if (!container) return;
+    
+    // 收集所有关键词并计算频率
+    const keywordFrequency = {};
+    result.content.forEach(item => {
+        if (item.keywords && Array.isArray(item.keywords)) {
+            item.keywords.forEach(keyword => {
+                keywordFrequency[keyword] = (keywordFrequency[keyword] || 0) + 1;
+            });
+        }
+    });
+    
+    // 如果没有关键词
+    if (Object.keys(keywordFrequency).length === 0) {
+        container.innerHTML = '<div class="text-center py-3"><p class="text-muted">没有关键词数据</p></div>';
+        return;
+    }
+    
+    // 格式化关键词云数据
+    const cloudData = Object.entries(keywordFrequency).map(([keyword, frequency]) => ({
+        tag: keyword,
+        weight: frequency
+    }));
+    
+    // 如果有jQCloud库，使用它来渲染关键词云
+    if (typeof $ !== 'undefined' && $.fn.jQCloud) {
+        // 清空容器
+        $(container).empty();
+        
+        // 渲染关键词云
+        $(container).jQCloud(cloudData, {
+            width: container.clientWidth,
+            height: 300,
+            colors: ["#36a2eb", "#ff6384", "#4bc0c0", "#ffcd56", "#9966ff"]
+        });
+    } else {
+        // 备用方案：使用简单的方式显示关键词
+        let html = '<div class="keyword-cloud-fallback">';
+        
+        // 按频率排序
+        cloudData.sort((a, b) => b.weight - a.weight);
+        
+        // 只显示前50个关键词
+        const displayKeywords = cloudData.slice(0, 50);
+        
+        // 找出最大和最小频率
+        const maxFreq = Math.max(...displayKeywords.map(kw => kw.weight));
+        const minFreq = Math.min(...displayKeywords.map(kw => kw.weight));
+        
+        // 计算字体大小范围
+        const fontSizeRange = {min: 12, max: 36};
+        
+        // 渲染关键词
+        displayKeywords.forEach(item => {
+            // 计算字体大小
+            const fontSize = minFreq === maxFreq ? 
+                fontSizeRange.min :
+                fontSizeRange.min + (fontSizeRange.max - fontSizeRange.min) * (item.weight - minFreq) / (maxFreq - minFreq);
+                
+            html += `<span class="keyword-cloud-item" style="font-size: ${fontSize}px;">${item.tag}</span>`;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+}
+
+// 25. 生成维基百科链接关系图
+function generateWikiLinkGraph(result) {
+    // 获取图表容器
+    const container = document.getElementById('wikiLinkGraph');
+    if (!container) return;
+    
+    // 显示加载中状态
+    container.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-2">生成关系图谱中...</p>
+        </div>
+    `;
+    
+    // 分析页面间的链接关系
+    setTimeout(() => {
+        // 构建节点和链接数据
+        const nodes = [];
+        const links = [];
+        const nodeMap = new Map(); // 用于快速查找节点索引
+        
+        // 首先添加所有页面作为节点
+        result.content.forEach((page, index) => {
+            if (!page.url) return;
+            
+            const node = {
+                id: index,
+                name: page.title || '无标题',
+                url: page.url,
+                type: page.url.includes('Category:') ? 'category' : 'page',
+                value: 1 // 初始值
+            };
+            
+            nodes.push(node);
+            nodeMap.set(page.url, index);
+        });
+        
+        // 然后分析页面内容中的链接，建立连接关系
+        result.content.forEach((page, sourceIndex) => {
+            if (!page.content) return;
+            
+            // 简单的链接提取
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = page.content;
+            
+            // 获取所有链接
+            const links = tempDiv.querySelectorAll('a');
+            links.forEach(link => {
+                const href = link.getAttribute('href');
+                if (!href) return;
+                
+                // 构建完整URL
+                let fullUrl;
+                if (href.startsWith('http')) {
+                    fullUrl = href;
+                } else if (href.startsWith('/wiki/')) {
+                    // 相对URL，转为绝对URL
+                    const baseUrl = new URL(page.url);
+                    fullUrl = `${baseUrl.protocol}//${baseUrl.host}${href}`;
+                } else {
+                    return; // 忽略其他类型的链接
+                }
+                
+                // 检查目标URL是否在我们的节点列表中
+                const targetIndex = nodeMap.get(fullUrl);
+                if (targetIndex !== undefined && targetIndex !== sourceIndex) {
+                    // 添加连接
+                    links.push({
+                        source: sourceIndex,
+                        target: targetIndex,
+                        value: 1 // 连接强度
+                    });
+                    
+                    // 增加目标节点的值（表示被引用次数）
+                    nodes[targetIndex].value++;
+                }
+            });
+        });
+        
+        // 如果有可视化库（如D3.js、ECharts等），使用它们来渲染关系图
+        if (typeof echarts !== 'undefined') {
+            // 使用ECharts渲染图谱
+            const myChart = echarts.init(container);
+            
+            const option = {
+                title: {
+                    text: '维基百科页面关系图谱',
+                    subtext: `共 ${nodes.length} 个节点, ${links.length} 个连接`,
+                    left: 'center'
+                },
+                tooltip: {
+                    formatter: function(params) {
+                        if (params.dataType === 'node') {
+                            return `<div>${params.data.name}</div>`;
+                        } else {
+                            return `<div>${nodes[params.data.source].name} → ${nodes[params.data.target].name}</div>`;
+                        }
+                    }
+                },
+                legend: {
+                    data: ['页面', '分类'],
+                    orient: 'vertical',
+                    right: 10,
+                    top: 20
+                },
+                series: [{
+                    name: '关系图谱',
+                    type: 'graph',
+                    layout: 'force',
+                    data: nodes.map(node => ({
+                        id: node.id,
+                        name: node.name,
+                        value: node.value,
+                        symbolSize: 10 + Math.min(node.value * 3, 20),
+                        category: node.type === 'category' ? 1 : 0,
+                        label: {
+                            show: node.value > 2 // 只显示重要节点的标签
+                        }
+                    })),
+                    links: links,
+                    categories: [
+                        { name: '页面' },
+                        { name: '分类' }
+                    ],
+                    roam: true,
+                    force: {
+                        repulsion: 100,
+                        edgeLength: 30
+                    },
+                    emphasis: {
+                        focus: 'adjacency',
+                        lineStyle: {
+                            width: 4
+                        }
+                    }
+                }]
+            };
+            
+            myChart.setOption(option);
+            
+            // 保存图表实例
+            window.wikiLinkGraph = myChart;
+            
+            // 添加窗口大小变化时的自适应调整
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+        } else {
+            // 备用方案：显示简单的统计信息
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 需要ECharts库来渲染关系图谱
+                </div>
+                <div class="text-center">
+                    <p>节点总数: ${nodes.length}</p>
+                    <p>连接总数: ${links.length}</p>
+                    <p>页面数: ${nodes.filter(n => n.type === 'page').length}</p>
+                    <p>分类数: ${nodes.filter(n => n.type === 'category').length}</p>
+                </div>
+            `;
+        }
+    }, 500); // 使用setTimeout让UI有机会显示加载状态
+}
+
+// 26. 生成维基百科分类树
+function generateWikiCategoryTree(rootCategory) {
+    // 获取可视化容器
+    const container = document.getElementById('wiki-visualization-container');
+    if (!container) return;
+    
+    // 获取是否包含页面
+    const includePages = document.getElementById('wiki-tree-include-pages').checked;
+    
+    // 显示加载中状态
+    container.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-2">正在获取维基百科分类结构，请稍候...</p>
+        </div>
+    `;
+    
+    // 获取选中的语言
+    const language = document.getElementById('wiki-language-selector').value || 'zh';
+    
+    // 调用API获取分类树
+    ApiClient.getWikiCategoryTree(rootCategory, {
+        language: language,
+        include_pages: includePages,
+        depth: 2
+    })
+        .then(result => {
+            if (!result || !result.root) {
+                container.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 未能获取分类树
+                    </div>
+                `;
+                return;
+            }
+            
+            // 渲染分类树
+            renderCategoryTree(result, container);
+        })
+        .catch(error => {
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle"></i> 获取分类树失败: ${error.message || '未知错误'}
+                </div>
+            `;
+        });
+    
+    // 渲染分类树
+    function renderCategoryTree(treeData, container) {
+        // 如果有ECharts库
+        if (typeof echarts !== 'undefined') {
+            // 使用ECharts渲染树形图
+            const myChart = echarts.init(container);
+            
+            // 转换数据格式为ECharts树图所需的格式
+            function convertToEChartsTree(node) {
+                const result = {
+                    name: node.name,
+                    value: node.type,
+                    children: []
+                };
+                
+                // 添加子分类
+                if (node.children && node.children.length > 0) {
+                    result.children = node.children.map(child => convertToEChartsTree(child));
+                }
+                
+                // 添加页面
+                if (node.pages && node.pages.length > 0) {
+                    node.pages.forEach(page => {
+                        result.children.push({
+                            name: page.title,
+                            value: 'page'
+                        });
+                    });
+                }
+                
+                return result;
+            }
+            
+            const treeDataForECharts = convertToEChartsTree(treeData.root);
+            
+            const option = {
+                title: {
+                    text: `维基百科分类树: ${treeData.root.name}`,
+                    left: 'center'
+                },
+                tooltip: {
+                    formatter: function(params) {
+                        return `<div>${params.data.name}</div>`;
+                    }
+                },
+                series: [{
+                    type: 'tree',
+                    data: [treeDataForECharts],
+                    top: '10%',
+                    left: '8%',
+                    bottom: '22%',
+                    right: '20%',
+                    symbolSize: 7,
+                    label: {
+                        position: 'left',
+                        verticalAlign: 'middle',
+                        align: 'right',
+                        fontSize: 12
+                    },
+                    leaves: {
+                        label: {
+                            position: 'right',
+                            verticalAlign: 'middle',
+                            align: 'left'
+                        }
+                    },
+                    initialTreeDepth: 2,
+                    expandAndCollapse: true,
+                    animationDuration: 550,
+                    animationDurationUpdate: 750
+                }]
+            };
+            
+            myChart.setOption(option);
+            
+            // 保存图表实例
+            window.wikiCategoryTreeChart = myChart;
+            
+            // 添加窗口大小变化时的自适应调整
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+        } else {
+            // 备用方案：显示简单的分类树
+            function renderSimpleTree(node, level = 0) {
+                const indent = '&nbsp;'.repeat(level * 4);
+                let html = `<div class="tree-node" style="padding-left: ${level * 20}px;">`;
+                
+                // 添加节点图标和名称
+                html += `<i class="bi bi-folder"></i> ${node.name}`;
+                
+                // 添加子节点
+                if (node.children && node.children.length > 0) {
+                    html += '<div class="tree-children">';
+                    node.children.forEach(child => {
+                        html += renderSimpleTree(child, level + 1);
+                    });
+                    html += '</div>';
+                }
+                
+                // 添加页面
+                if (includePages && node.pages && node.pages.length > 0) {
+                    html += '<div class="tree-pages">';
+                    node.pages.forEach(page => {
+                        html += `<div class="tree-page" style="padding-left: ${(level + 1) * 20}px;"><i class="bi bi-file-text"></i> ${page.title}</div>`;
+                    });
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+                return html;
+            }
+            
+            container.innerHTML = `
+                <div class="simple-tree-container">
+                    <h4>维基百科分类树: ${treeData.root.name}</h4>
+                    <div class="simple-tree">
+                        ${renderSimpleTree(treeData.root)}
+                    </div>
+                </div>
+            `;
+        }
+    }
+}
+
+// 27. 查找维基百科页面路径
+function findWikiPagePath(sourcePage, targetPage) {
+    // 获取可视化容器
+    const container = document.getElementById('wiki-visualization-container');
+    if (!container) return;
+    
+    // 获取选中的语言
+    const language = document.getElementById('wiki-language-selector').value || 'zh';
+    
+    // 显示加载中状态
+    container.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-2">正在查找页面路径，这可能需要一些时间...</p>
+        </div>
+    `;
+    
+    // 调用API查找路径
+    ApiClient.findWikiPagePath(sourcePage, targetPage, { language: language })
+        .then(result => {
+            if (!result || !result.path || result.path.length === 0) {
+                container.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 未能找到从"${sourcePage}"到"${targetPage}"的路径
+                    </div>
+                `;
+                return;
+            }
+            
+            // 渲染路径
+            renderPagePath(result, container);
+        })
+        .catch(error => {
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle"></i> 查找路径失败: ${error.message || '未知错误'}
+                </div>
+            `;
+        });
+    
+    // 渲染页面路径
+    function renderPagePath(pathData, container) {
+        // 如果有ECharts库
+        if (typeof echarts !== 'undefined') {
+            // 使用ECharts渲染路径图
+            const myChart = echarts.init(container);
+            
+            // 准备节点和链接数据
+            const nodes = pathData.path.map((page, index) => ({
+                id: index,
+                name: page.title,
+                value: index === 0 || index === pathData.path.length - 1 ? 2 : 1,
+                category: index === 0 ? 0 : (index === pathData.path.length - 1 ? 1 : 2)
+            }));
+            
+            const links = [];
+            for (let i = 0; i < pathData.path.length - 1; i++) {
+                links.push({
+                    source: i,
+                    target: i + 1
+                });
+            }
+            
+            const option = {
+                title: {
+                    text: `维基百科页面路径: ${sourcePage} → ${targetPage}`,
+                    subtext: `路径长度: ${pathData.path.length - 1} 步`,
+                    left: 'center'
+                },
+                tooltip: {
+                    formatter: function(params) {
+                        return `<div>${params.data.name}</div>`;
+                    }
+                },
+                legend: {
+                    data: ['起点', '终点', '中间节点'],
+                    orient: 'vertical',
+                    right: 10,
+                    top: 20
+                },
+                series: [{
+                    name: '页面路径',
+                    type: 'graph',
+                    layout: 'force',
+                    data: nodes.map(node => ({
+                        id: node.id,
+                        name: node.name,
+                        value: node.value,
+                        symbolSize: node.value === 2 ? 20 : 15,
+                        category: node.category,
+                        label: {
+                            show: true
+                        }
+                    })),
+                    links: links,
+                    categories: [
+                        { name: '起点' },
+                        { name: '终点' },
+                        { name: '中间节点' }
+                    ],
+                    roam: true,
+                    force: {
+                        repulsion: 100,
+                        edgeLength: 100
+                    },
+                    lineStyle: {
+                        color: 'source',
+                        curveness: 0.3
+                    },
+                    emphasis: {
+                        focus: 'adjacency',
+                        lineStyle: {
+                            width: 4
+                        }
+                    }
+                }]
+            };
+            
+            myChart.setOption(option);
+            
+            // 保存图表实例
+            window.wikiPagePathChart = myChart;
+            
+            // 添加窗口大小变化时的自适应调整
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+        } else {
+            // 备用方案：显示简单的路径
+            let html = `
+                <div class="wiki-path-container">
+                    <h4>从 "${sourcePage}" 到 "${targetPage}" 的路径</h4>
+                    <p>路径长度: ${pathData.path.length - 1} 步</p>
+                    <div class="wiki-path">
+            `;
+            
+            pathData.path.forEach((page, index) => {
+                html += `
+                    <div class="wiki-path-node">
+                        <div class="wiki-path-icon">
+                            ${index === 0 ? '<i class="bi bi-house-fill"></i>' : 
+                              (index === pathData.path.length - 1 ? '<i class="bi bi-flag-fill"></i>' : 
+                               `<span class="step-number">${index}</span>`)}
+                        </div>
+                        <div class="wiki-path-content">
+                            <div class="wiki-path-title">${page.title}</div>
+                            <div class="wiki-path-url">
+                                <a href="${page.url}" target="_blank">${page.url}</a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 添加连接线（除了最后一个节点）
+                if (index < pathData.path.length - 1) {
+                    html += '<div class="wiki-path-connector"><i class="bi bi-arrow-down"></i></div>';
+                }
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+    }
+}
+
+// 28. HTML内容安全过滤函数
+function sanitizeHtml(html) {
+    if (!html) return '';
+    
+    // 创建临时元素
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    
+    // 移除所有脚本标签
+    const scripts = tempDiv.querySelectorAll('script');
+    scripts.forEach(script => script.remove());
+    
+    // 移除所有iframe标签
+    const iframes = tempDiv.querySelectorAll('iframe');
+    iframes.forEach(iframe => iframe.remove());
+    
+    // 移除on*事件属性
+    const allElements = tempDiv.querySelectorAll('*');
+    allElements.forEach(el => {
+        // 获取所有属性
+        const attributes = el.attributes;
+        const attributesToRemove = [];
+        
+        // 收集需要移除的属性
+        for (let i = 0; i < attributes.length; i++) {
+            const attr = attributes[i];
+            if (attr.name.startsWith('on')) {
+                attributesToRemove.push(attr.name);
+            }
+            // 移除javascript:协议
+            if (attr.name === 'href' && attr.value.toLowerCase().startsWith('javascript:')) {
+                attributesToRemove.push(attr.name);
+            }
+        }
+        
+        // 移除收集的属性
+        attributesToRemove.forEach(attrName => {
+            el.removeAttribute(attrName);
+        });
+    });
+    
+    return tempDiv.innerHTML;
+}
+
+// 29. 为API客户端添加维基百科相关接口
+if (window.ApiClient) {
+    // 搜索维基百科
+    ApiClient.searchWiki = async function(query, options = {}) {
+        try {
+            const params = new URLSearchParams({
+                query: query,
+                language: options.language || 'zh',
+                limit: options.limit || 10
+            });
+            
+            const response = await fetch(`${API_BASE_URL}/wiki/search?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '搜索失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('搜索维基百科出错:', error);
+            throw error;
+        }
+    };
+    
+    // 获取随机维基百科页面
+    ApiClient.getRandomWikiPages = async function(options = {}) {
+        try {
+            const params = new URLSearchParams({
+                count: options.count || 5,
+                language: options.language || 'zh'
+            });
+            
+            const response = await fetch(`${API_BASE_URL}/wiki/random?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '获取随机页面失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('获取随机维基百科页面出错:', error);
+            throw error;
+        }
+    };
+    
+    // 提交维基百科爬取任务
+    ApiClient.submitWikiTask = async function(config) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '提交任务失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('提交维基百科爬取任务出错:', error);
+            throw error;
+        }
+    };
+    
+    // 获取维基百科爬取任务状态
+    ApiClient.getWikiTaskStatus = async function(taskId) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/status/${taskId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '获取任务状态失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('获取维基百科任务状态出错:', error);
+            throw error;
+        }
+    };
+    
+    // 获取维基百科爬取任务结果
+    ApiClient.getWikiTaskResult = async function(taskId) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/result/${taskId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '获取任务结果失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('获取维基百科任务结果出错:', error);
+            throw error;
+        }
+    };
+    
+    // 取消维基百科爬取任务
+    ApiClient.cancelWikiTask = async function(taskId) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/cancel/${taskId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '取消任务失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('取消维基百科任务出错:', error);
+            throw error;
+        }
+    };
+    
+    // 获取维基百科任务列表
+    ApiClient.getWikiTasks = async function() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/tasks`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '获取任务列表失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('获取维基百科任务列表出错:', error);
+            throw error;
+        }
+    };
+    
+    // 获取维基百科下载链接
+    ApiClient.getWikiDownloadLink = function(taskId, format = 'json') {
+        return `${API_BASE_URL}/wiki/download/${taskId}?format=${format}`;
+    };
+    
+    // 提取维基百科页面结构化信息
+    ApiClient.extractWikiStructuredInfo = async function(url) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/extract`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url: url })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '提取结构化信息失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('提取维基百科结构化信息出错:', error);
+            throw error;
+        }
+    };
+    
+    // 获取维基百科支持的语言列表
+    ApiClient.getWikiLanguages = async function() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/languages`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '获取语言列表失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('获取维基百科语言列表出错:', error);
+            throw error;
+        }
+    };
+    
+    // 获取维基百科分类树（继续）
+    ApiClient.getWikiCategoryTree = async function(rootCategory, options = {}) {
+        try {
+            const params = new URLSearchParams({
+                category: rootCategory,
+                language: options.language || 'zh',
+                depth: options.depth || 2,
+                include_pages: options.include_pages ? 1 : 0
+            });
+            
+            const response = await fetch(`${API_BASE_URL}/wiki/category-tree?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '获取分类树失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('获取维基百科分类树出错:', error);
+            throw error;
+        }
+    };
+    
+    // 查找维基百科页面路径
+    ApiClient.findWikiPagePath = async function(sourcePage, targetPage, options = {}) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/wiki/path`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    source: sourcePage,
+                    target: targetPage,
+                    language: options.language || 'zh'
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '查找路径失败');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('查找维基百科页面路径出错:', error);
+            throw error;
+        }
+    };
+}
+
+// 30. 绑定维基百科可视化界面事件
+function initWikiVisualization() {
+    // 分类树生成按钮
+    const treeGenerateBtn = document.getElementById('wiki-tree-generate-btn');
+    if (treeGenerateBtn) {
+        treeGenerateBtn.addEventListener('click', function() {
+            const rootCategory = document.getElementById('wiki-tree-root').value.trim();
+            if (rootCategory) {
+                generateWikiCategoryTree(rootCategory);
+            } else {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '请输入根分类',
+                    text: '请输入要生成树的分类名称',
+                    confirmButtonText: '确定'
+                });
+            }
+        });
+    }
+    
+    // 页面路径查找按钮
+    const pathFindBtn = document.getElementById('wiki-path-find-btn');
+    if (pathFindBtn) {
+        pathFindBtn.addEventListener('click', function() {
+            const sourcePage = document.getElementById('wiki-path-source').value.trim();
+            const targetPage = document.getElementById('wiki-path-target').value.trim();
+            
+            if (sourcePage && targetPage) {
+                findWikiPagePath(sourcePage, targetPage);
+            } else {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '输入不完整',
+                    text: '请输入源页面和目标页面',
+                    confirmButtonText: '确定'
+                });
+            }
+        });
+    }
+}
+
 });
