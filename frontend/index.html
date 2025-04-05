@@ -14,6 +14,12 @@
     <link rel="stylesheet" href="css/theme-styles.css">
     <!-- 图表支持 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- ECharts支持 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- jQCloud支持 -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jqcloud2@2.0.3/dist/jqcloud.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jqcloud2@2.0.3/dist/jqcloud.min.css">
     <!-- 提示框支持 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
@@ -293,6 +299,9 @@
                                 <li class="nav-item">
                                     <a class="nav-link" id="stats-tab" data-bs-toggle="tab" href="#stats">统计信息</a>
                                 </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" id="wiki-tab" data-bs-toggle="tab" href="#wiki">维基百科</a>
+                                </li>
                             </ul>
                         </div>
                         <div class="card-body">
@@ -386,6 +395,283 @@
                                     <div id="statisticsContent">
                                         <div class="empty-message text-center py-5">
                                             <p class="text-muted">请先上传爬虫结果文件或运行爬虫任务</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 维基百科标签页 -->
+                                <div class="tab-pane fade" id="wiki">
+                                    <div class="row">
+                                        <div class="col-md-12 mb-4">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <ul class="nav nav-tabs card-header-tabs" id="wikiSubTabs">
+                                                        <li class="nav-item">
+                                                            <a class="nav-link active" id="wiki-search-tab" data-bs-toggle="tab" href="#wiki-search">搜索</a>
+                                                        </li>
+                                                        <li class="nav-item">
+                                                            <a class="nav-link" id="wiki-category-tab" data-bs-toggle="tab" href="#wiki-category">分类爬取</a>
+                                                        </li>
+                                                        <li class="nav-item">
+                                                            <a class="nav-link" id="wiki-results-tab" data-bs-toggle="tab" href="#wiki-results">爬取结果</a>
+                                                        </li>
+                                                        <li class="nav-item">
+                                                            <a class="nav-link" id="wiki-visualize-tab" data-bs-toggle="tab" href="#wiki-visualize">可视化</a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="tab-content">
+                                                        <!-- 搜索标签页 -->
+                                                        <div class="tab-pane fade show active" id="wiki-search">
+                                                            <div class="row">
+                                                                <div class="col-md-12 mb-3">
+                                                                    <div class="wiki-language-container mb-3">
+                                                                        <label for="wiki-language-selector" class="form-label">维基百科语言版本</label>
+                                                                        <select id="wiki-language-selector" class="form-select">
+                                                                            <option value="zh" selected>中文</option>
+                                                                            <option value="en">英文</option>
+                                                                            <option value="ja">日文</option>
+                                                                            <option value="ko">韩文</option>
+                                                                            <option value="fr">法文</option>
+                                                                            <option value="de">德文</option>
+                                                                            <option value="es">西班牙文</option>
+                                                                            <option value="ru">俄文</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <form id="wiki-search-form">
+                                                                        <div class="input-group">
+                                                                            <input type="text" id="wiki-search-input" class="form-control" placeholder="输入维基百科搜索关键词">
+                                                                            <button type="submit" class="btn btn-primary">搜索</button>
+                                                                        </div>
+                                                                    </form>
+                                                                </div>
+                                                            </div>
+                                                            <div class="row mt-3">
+                                                                <div class="col-md-12">
+                                                                    <div id="wiki-search-results">
+                                                                        <div class="text-center py-5">
+                                                                            <p class="text-muted">输入关键词搜索维基百科</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="row mt-3">
+                                                                <div class="col-md-12">
+                                                                    <div class="card">
+                                                                        <div class="card-header">
+                                                                            <h5 class="mb-0">获取随机页面</h5>
+                                                                        </div>
+                                                                        <div class="card-body">
+                                                                            <div class="input-group">
+                                                                                <select id="wiki-random-count" class="form-select" style="max-width: 100px;">
+                                                                                    <option value="1">1页</option>
+                                                                                    <option value="3" selected>3页</option>
+                                                                                    <option value="5">5页</option>
+                                                                                    <option value="10">10页</option>
+                                                                                </select>
+                                                                                <button id="wiki-random-pages-btn" class="btn btn-secondary">获取随机页面</button>
+                                                                            </div>
+                                                                            <div id="wiki-random-results" class="mt-3">
+                                                                                <!-- 随机页面结果将显示在这里 -->
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <!-- 分类爬取标签页 -->
+                                                        <div class="tab-pane fade" id="wiki-category">
+                                                            <div class="row">
+                                                                <div class="col-md-12">
+                                                                    <form id="wiki-category-form">
+                                                                        <div class="mb-3">
+                                                                            <label for="wiki-category-input" class="form-label">分类名称或URL</label>
+                                                                            <input type="text" id="wiki-category-input" class="form-control" placeholder="例如: Category:计算机科学 或 https://zh.wikipedia.org/wiki/Category:计算机科学">
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label for="wiki-category-depth" class="form-label">爬取深度</label>
+                                                                            <select id="wiki-category-depth" class="form-select">
+                                                                                <option value="0">0 (只爬取当前分类)</option>
+                                                                                <option value="1" selected>1 (爬取当前分类和子分类)</option>
+                                                                                <option value="2">2 (爬取到子分类的子分类)</option>
+                                                                                <option value="3">3 (深度爬取，慎用)</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label">筛选选项</label>
+                                                                            <div class="form-check">
+                                                                                <input class="form-check-input" type="checkbox" id="wiki-filter-games" checked>
+                                                                                <label class="form-check-label" for="wiki-filter-games">排除游戏相关内容</label>
+                                                                            </div>
+                                                                            <div class="form-check">
+                                                                                <input class="form-check-input" type="checkbox" id="wiki-filter-wiki" checked>
+                                                                                <label class="form-check-label" for="wiki-filter-wiki">排除维基百科自身相关内容</label>
+                                                                            </div>
+                                                                            <div class="form-check">
+                                                                                <input class="form-check-input" type="checkbox" id="wiki-include-pages" checked>
+                                                                                <label class="form-check-label" for="wiki-include-pages">包含页面内容(不仅爬取分类)</label>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="d-grid gap-2">
+                                                                            <button type="submit" class="btn btn-primary">开始爬取</button>
+                                                                        </div>
+                                                                    </form>
+                                                                </div>
+                                                            </div>
+                                                            <div class="row mt-4">
+                                                                <div class="col-md-12">
+                                                                    <div id="wiki-category-progress" class="d-none">
+                                                                        <h5>爬取进度</h5>
+                                                                        <div class="progress mb-3">
+                                                                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                                                        </div>
+                                                                        <div class="crawl-stats">
+                                                                            <div class="row">
+                                                                                <div class="col-md-3">
+                                                                                    <div class="stat-item">
+                                                                                        <div class="stat-label">分类页面:</div>
+                                                                                        <div class="stat-value" id="wiki-stat-categories">0</div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="col-md-3">
+                                                                                    <div class="stat-item">
+                                                                                        <div class="stat-label">内容页面:</div>
+                                                                                        <div class="stat-value" id="wiki-stat-pages">0</div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="col-md-3">
+                                                                                    <div class="stat-item">
+                                                                                        <div class="stat-label">待处理:</div>
+                                                                                        <div class="stat-value" id="wiki-stat-queue">0</div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="col-md-3">
+                                                                                    <div class="stat-item">
+                                                                                        <div class="stat-label">用时:</div>
+                                                                                        <div class="stat-value" id="wiki-stat-time">0s</div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="text-center mt-3">
+                                                                            <button id="wiki-cancel-crawl-btn" class="btn btn-danger">取消爬取</button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <!-- 爬取结果标签页 -->
+                                                        <div class="tab-pane fade" id="wiki-results">
+                                                            <div class="row">
+                                                                <div class="col-md-12 mb-3">
+                                                                    <div class="alert alert-info">
+                                                                        <i class="bi bi-info-circle"></i> 这里显示最近的维基百科爬取任务结果
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="row">
+                                                                <div class="col-md-12">
+                                                                    <div id="wiki-task-list">
+                                                                        <div class="text-center py-5">
+                                                                            <p class="text-muted">加载维基百科任务列表中...</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="row mt-4">
+                                                                <div class="col-md-12">
+                                                                    <div id="wiki-result-detail" class="d-none">
+                                                                        <h4 id="wiki-result-title">结果详情</h4>
+                                                                        <div class="result-stats mb-3">
+                                                                            <span class="badge bg-primary" id="wiki-result-categories">分类: 0</span>
+                                                                            <span class="badge bg-success" id="wiki-result-pages">页面: 0</span>
+                                                                            <span class="badge bg-info" id="wiki-result-time">用时: 0s</span>
+                                                                        </div>
+                                                                        <div class="result-actions mb-3">
+                                                                            <div class="btn-group">
+                                                                                <button class="btn btn-outline-primary" id="wiki-download-json-btn">下载JSON</button>
+                                                                                <button class="btn btn-outline-primary" id="wiki-download-csv-btn">下载CSV</button>
+                                                                                <button class="btn btn-outline-primary" id="wiki-download-html-btn">下载HTML</button>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div id="wiki-result-content">
+                                                                            <div class="text-center py-5">
+                                                                                <p class="text-muted">选择一个任务查看详情</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <!-- 可视化标签页 -->
+                                                        <div class="tab-pane fade" id="wiki-visualize">
+                                                            <div class="row">
+                                                                <div class="col-md-12 mb-3">
+                                                                    <div class="alert alert-info">
+                                                                        <i class="bi bi-info-circle"></i> 可视化维基百科数据结构和关系
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="row">
+                                                                <div class="col-md-4">
+                                                                    <div class="card mb-3">
+                                                                        <div class="card-header">
+                                                                            <h5 class="mb-0">分类树</h5>
+                                                                        </div>
+                                                                        <div class="card-body">
+                                                                            <div class="mb-3">
+                                                                                <label for="wiki-tree-root" class="form-label">根分类</label>
+                                                                                <div class="input-group">
+                                                                                    <input type="text" id="wiki-tree-root" class="form-control" placeholder="例如: 计算机科学">
+                                                                                    <button id="wiki-tree-generate-btn" class="btn btn-primary">生成</button>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="form-check">
+                                                                                <input class="form-check-input" type="checkbox" id="wiki-tree-include-pages" checked>
+                                                                                <label class="form-check-label" for="wiki-tree-include-pages">包含页面</label>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="card mb-3">
+                                                                        <div class="card-header">
+                                                                            <h5 class="mb-0">页面关系</h5>
+                                                                        </div>
+                                                                        <div class="card-body">
+                                                                            <div class="mb-3">
+                                                                                <label for="wiki-path-source" class="form-label">源页面</label>
+                                                                                <input type="text" id="wiki-path-source" class="form-control" placeholder="例如: 人工智能">
+                                                                            </div>
+                                                                            <div class="mb-3">
+                                                                                <label for="wiki-path-target" class="form-label">目标页面</label>
+                                                                                <input type="text" id="wiki-path-target" class="form-control" placeholder="例如: 机器学习">
+                                                                            </div>
+                                                                            <button id="wiki-path-find-btn" class="btn btn-primary">查找路径</button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-8">
+                                                                    <div class="card">
+                                                                        <div class="card-header">
+                                                                            <h5 class="mb-0">可视化结果</h5>
+                                                                        </div>
+                                                                        <div class="card-body">
+                                                                            <div id="wiki-visualization-container" style="height: 600px;">
+                                                                                <div class="text-center py-5">
+                                                                                    <p class="text-muted">从左侧选择可视化选项</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
