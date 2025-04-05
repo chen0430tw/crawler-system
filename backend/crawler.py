@@ -195,6 +195,12 @@ class WebCrawler:
                 # 检查内容类型
                 content_type = response.headers.get('Content-Type', '')
                 
+                # 如果是网页内容
+                if 'text/html' in content_type or 'application/xhtml+xml' in content_type:
+                    # 自动检测编码（如 gb2312, gbk）
+                    response.encoding = response.apparent_encoding
+                    return response.text, status_code
+                
                 # 允许处理HTML和PDF等内容
                 if 'text/html' in content_type or 'application/xhtml+xml' in content_type:
                     return response.text, status_code
