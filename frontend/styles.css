@@ -1,723 +1,670 @@
-/* 全局样式 */
+/* 全局重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Body 背景设置 */
 body {
-    background-color: #f8f9fa;
-    color: #333;
+  background: url('your-background-image.jpg') no-repeat center center fixed;
+  background-size: cover;
+  background-color: rgba(248, 249, 250, 0.5); /* 降低透明度 */
+  background-blend-mode: normal; /* 改为normal */
+  color: #333;
+  transition: background-color 0.3s, color 0.3s;
+  font-family: sans-serif;
+  line-height: 1.6;
 }
 
-.container {
-    max-width: 1400px;
+/* 主容器：限制宽度、居中显示并增加内边距 */
+.container-fluid {
+  max-width: 1200px; /* 调整为1200px，避免内容分散 */
+  margin: 0 auto;
+  padding: 20px;
 }
 
-/* 头部样式 */
+/* Bootstrap 网格系统调整 */
+.row {
+  margin-left: -15px;
+  margin-right: -15px;
+}
+[class*="col-"] {
+  padding-left: 15px;
+  padding-right: 15px;
+}
+
+/* 设置菜单样式 */
+.settings-dropdown {
+  width: 300px;
+  padding: 15px;
+}
+
+.dropdown-header {
+  font-weight: 600;
+  color: #495057;
+  padding: 8px 0;
+  margin-top: 10px;
+}
+
+.dropdown-header:first-child {
+  margin-top: 0;
+}
+
+/* 背景选项 */
+.background-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.background-options.compact {
+  gap: 5px;
+}
+
+.bg-option {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bg-option.active {
+  border: 2px solid #0d6efd;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+/* 透明度选项 */
+.opacity-options {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.opacity-option {
+  width: 40px;
+  height: 30px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  background-color: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.opacity-option:hover {
+  background-color: #e9ecef;
+}
+
+.opacity-option.active {
+  border-color: #0d6efd;
+  background-color: #e7f1ff;
+  color: #0d6efd;
+  font-weight: bold;
+}
+
+/* 按钮增强效果 */
+.btn {
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-close:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* 表格样式增强 */
+.table thead th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  border-top: none;
+}
+
+.table-hover tbody tr:hover {
+  background-color: rgba(13, 110, 253, 0.05);
+}
+
+/* 当进度条到达100%时的特殊样式 */
+.progress-bar[aria-valuenow="100"] {
+  background-color: #28a745;
+}
+
+/* 头部样式：增加内边距和下边距，确保布局不紧凑 */
 header {
-    background-color: #f8f9fa;
+  background-color: rgba(248, 249, 250, 0.9); /* 增加透明度 */
+  transition: background-color 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  padding: 20px 0;
+  margin-bottom: 20px;
+  border-radius: 8px; /* 添加圆角 */
+}
+
+header h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0;
 }
 
 /* 服务器状态指示器 */
 .status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: background-color 0.3s;
 }
 
 .status-indicator.bg-success {
-    background-color: #28a745;
+  background-color: #28a745;
 }
 
 .status-indicator.bg-danger {
-    background-color: #dc3545;
+  background-color: #dc3545;
 }
 
 .status-indicator.bg-secondary {
-    background-color: #6c757d;
+  background-color: #6c757d;
 }
 
-/* 上传区域样式 */
+/* 上传区域样式：增加内边距、圆角、阴影以及下边距 */
 .upload-area {
-    border: 2px dashed #ccc;
-    border-radius: 8px;
-    padding: 30px;
-    text-align: center;
-    background-color: #f9f9f9;
-    cursor: pointer;
-    transition: all 0.3s;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  background-color: rgba(249, 249, 249, 0.7); /* 更透明 */
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 20px;
 }
 
-.upload-area:hover, .upload-area.dragover {
-    border-color: #6c757d;
-    background-color: #f0f0f0;
+.upload-area:hover,
+.upload-area.dragover {
+  border-color: #6c757d;
+  background-color: rgba(240, 240, 240, 0.8);
 }
 
 .upload-icon {
-    margin-bottom: 15px;
-    color: #6c757d;
+  margin-bottom: 15px;
+  color: #6c757d;
 }
 
 /* URL列表样式 */
 .url-item {
-    cursor: pointer;
-    border-left: 3px solid transparent;
-    transition: all 0.2s;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
 }
 
 .url-item:hover {
-    background-color: #f5f5f5;
+  background-color: rgba(0, 0, 0, 0.03);
 }
 
 .url-item.active {
-    background-color: #e9f2ff;
-    border-left-color: #0d6efd;
+  background-color: rgba(13, 110, 253, 0.1);
+  border-left-color: #0d6efd;
 }
 
 .url-title {
-    font-weight: bold;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .url-path {
-    font-size: 0.8rem;
-    color: #666;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 内容预览样式 */
 #contentPreview {
-    min-height: 400px;
+  min-height: 400px;
 }
 
 .content-title {
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px dashed #ccc;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #ccc;
 }
 
 .content-body {
-    background-color: #fff;
-    padding: 15px;
-    border-radius: 5px;
-    border: 1px solid #e0e0e0;
+  background-color: #fff;
+  padding: 15px;
+  border-radius: 5px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 /* 分类样式 */
 .category-item {
-    cursor: pointer;
-    border-left: 3px solid transparent;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .category-item:hover {
-    background-color: #f5f5f5;
+  background-color: rgba(0, 0, 0, 0.03);
 }
 
 .category-item.active {
-    background-color: #e9f2ff;
-    border-left-color: #0d6efd;
+  background-color: rgba(13, 110, 253, 0.1);
+  border-left-color: #0d6efd;
 }
 
 .category-title {
-    font-weight: bold;
+  font-weight: bold;
 }
 
 .category-count {
-    font-size: 0.8rem;
-    color: #666;
+  font-size: 0.8rem;
+  color: #666;
 }
 
 .category-content {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
 }
 
 .category-item-preview {
-    width: calc(50% - 15px);
-    border: 1px solid #e0e0e0;
-    border-radius: 5px;
-    padding: 10px;
-    background-color: #f9f9f9;
-    margin-bottom: 15px;
+  width: calc(50% - 15px);
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  margin-bottom: 15px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.item-url {
-    font-size: 0.8rem;
-    color: #666;
-    margin-bottom: 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.category-item-preview:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.1);
 }
 
 /* 关键词标签样式 */
 .keyword {
-    display: inline-block;
-    background-color: #0d6efd;
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    margin-right: 5px;
-    margin-bottom: 5px;
+  display: inline-block;
+  background-color: #0d6efd;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  margin-right: 5px;
+  margin-bottom: 5px;
 }
 
-/* 统计卡片样式 */
-.stats-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+/* 折叠面板样式增强 */
+.accordion-button {
+  background-color: #f8f9fa;
+  font-weight: 500;
 }
 
-.stats-card {
-    background-color: #f5f5f5;
-    border: 1px solid #e0e0e0;
-    border-radius: 5px;
-    padding: 15px;
-    flex: 1;
-    min-width: 250px;
+.accordion-button:not(.collapsed) {
+  background-color: #e7f1ff;
+  color: #0d6efd;
 }
 
-.stats-title {
-    font-weight: bold;
-    font-size: 1.1rem;
-    margin-bottom: 10px;
-    padding-bottom: 5px;
-    border-bottom: 1px solid #e0e0e0;
+.accordion-button:focus {
+  box-shadow: none;
+  border-color: rgba(13, 110, 253, 0.25);
 }
 
-.stats-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 0;
-    border-bottom: 1px dashed #e0e0e0;
+/* 侧边栏模块样式 */
+.sidebar-section {
+  transition: all 0.3s ease;
+  margin-bottom: 16px;
 }
 
-.stats-row:last-child {
-    border-bottom: none;
+.sidebar-section .card {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
 }
 
-.stats-value {
-    font-weight: bold;
+.sidebar-section .card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 空内容提示 */
-.empty-message {
-    color: #999;
-    font-style: italic;
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-    .category-item-preview {
-        width: 100%;
-    }
-}
-
-/* 修复内容溢出问题 */
-.content-body, .content-info, pre {
-    max-width: 100%;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    white-space: normal;
-}
-
-a {
-    word-break: break-all;
-}
-
-#contentPreview div {
-    max-width: 100%;
-    overflow-wrap: break-word;
-}
-
-pre {
-    white-space: pre-wrap;
-}
-
-.content-body {
-    width: 100%;
-    box-sizing: border-box;
-}
-
-@media (max-width: 768px) {
-    .content-info, .url-info, .status-info {
-        max-width: 100%;
-        overflow-wrap: break-word;
-    }
-}
-
-/* 修复长URL和内容显示 */
-.item-url {
-    white-space: normal;
-    word-break: break-all;
-}
-
-.url-path {
-    white-space: normal;
-    word-break: break-all;
-}
-
-/* 确保内容列表能够适当换行 */
-.content-info a, .url-info a {
-    display: inline-block;
-    max-width: 100%;
-    word-break: break-all;
-}
-
-/* 图片处理 - 控制大小并添加点击放大功能 */
-.content-body img {
-    max-width: 100%;
-    height: auto;
-    cursor: pointer;
-    transition: transform 0.3s;
-    border: 1px solid #eee;
-    border-radius: 4px;
-}
-
-/* 创建弹出层样式 */
-.image-modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    justify-content: center;
-    align-items: center;
-}
-
-.image-modal-content {
-    max-width: 90%;
-    max-height: 90%;
-}
-
-.image-modal.show {
-    display: flex;
-}
-
-/* 任务列表样式 */
-#taskList {
-    min-height: 400px;
-}
-
-.task-details pre {
-    background-color: #f8f9fa;
-    padding: 10px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    max-height: 200px;
-    overflow-y: auto;
+.sidebar-section .card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 12px 15px;
 }
 
 /* 阴谋论检测相关样式 */
-
-/* 引入图标字体 */
-@import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css");
-
-/* 阴谋论信息面板样式 */
-.urban-legend-info {
-    margin: 15px 0;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.urban-legend-header {
-    padding: 12px 15px;
-    font-weight: bold;
-    color: white;
-    display: flex;
-    align-items: center;
-}
-
-.urban-legend-header i {
-    margin-right: 8px;
-}
-
-.urban-legend-details, 
-.urban-legend-thresholds {
-    padding: 12px 15px;
-    background-color: #f8f9fa;
-    border-top: 1px solid rgba(0,0,0,0.1);
-}
-
-.details-row, .threshold-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 0;
-    border-bottom: 1px dashed #e0e0e0;
-}
-
-.details-row:last-child, 
-.threshold-row:last-child {
-    border-bottom: none;
-}
-
-.threshold-title {
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-
-.details-label, 
-.threshold-label {
-    color: #666;
-}
-
-.details-value, 
-.threshold-value {
-    font-weight: bold;
-}
-
-.urban-legend-none {
-    padding: 15px;
-    background-color: #f8f9fa;
-    text-align: center;
-    font-style: italic;
-    color: #666;
-    border-radius: 8px;
-    margin: 15px 0;
-}
-
-/* 检测结果状态颜色 */
 .conspiracy-confirmed {
-    background-color: #f8d7da;
-    border-color: #f5c6cb;
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
 }
 
-.conspiracy-confirmed .urban-legend-header {
-    background-color: #dc3545;
+.conspiracy-confirmed-text {
+  color: #dc3545;
 }
 
 .conspiracy-suspect {
-    background-color: #fff3cd;
-    border-color: #ffeeba;
-}
-
-.conspiracy-suspect .urban-legend-header {
-    background-color: #ffc107;
-}
-
-.conspiracy-normal {
-    background-color: #d4edda;
-    border-color: #c3e6cb;
-}
-
-.conspiracy-normal .urban-legend-header {
-    background-color: #28a745;
-}
-
-/* 任务状态颜色 */
-.text-running {
-    color: #0d6efd;
-}
-
-.text-completed {
-    color: #28a745;
-}
-
-.text-failed {
-    color: #dc3545;
-}
-
-.text-pending {
-    color: #ffc107;
-}
-
-/* 检测结果列表样式 */
-.conspiracy-group-header {
-    font-weight: bold;
-    color: white;
-    display: flex;
-    align-items: center;
-    margin-top: 10px;
-}
-
-.conspiracy-group-header i {
-    margin-right: 8px;
-}
-
-.conspiracy-item {
-    padding-left: 25px;
-    border-left-width: 3px;
-    cursor: pointer;
-}
-
-.conspiracy-item-title {
-    font-weight: bold;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.conspiracy-item-url {
-    font-size: 0.8rem;
-    color: #666;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.conspiracy-item-score {
-    font-size: 0.8rem;
-    font-weight: bold;
-}
-
-.conspiracy-item:hover {
-    filter: brightness(0.95);
-}
-
-.conspiracy-item.active {
-    filter: brightness(0.9);
-}
-
-/* 阴谋论详情页面样式 */
-.conspiracy-detail {
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.conspiracy-detail-header {
-    padding: 15px;
-    color: white;
-}
-
-.conspiracy-detail-title {
-    font-size: 1.2rem;
-    font-weight: bold;
-    margin: 10px 0;
-}
-
-.conspiracy-detail-url {
-    font-size: 0.9rem;
-    word-break: break-all;
-}
-
-.conspiracy-detail-url a {
-    color: rgba(255,255,255,0.9);
-}
-
-.conspiracy-detail-body {
-    padding: 15px;
-    background-color: #f8f9fa;
-}
-
-.conspiracy-metrics,
-.conspiracy-thresholds,
-.conspiracy-keywords {
-    margin-bottom: 20px;
-    background-color: white;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.conspiracy-metrics h5,
-.conspiracy-thresholds h5,
-.conspiracy-keywords h5 {
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #eee;
-}
-
-.metrics-grid,
-.thresholds-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 15px;
-}
-
-.metric-item,
-.threshold-item {
-    border: 1px solid #eee;
-    border-radius: 5px;
-    padding: 10px;
-    background-color: #f9f9f9;
-}
-
-.metric-label,
-.threshold-label {
-    font-size: 0.85rem;
-    color: #666;
-    margin-bottom: 5px;
-}
-
-.metric-value,
-.threshold-value {
-    font-weight: bold;
-    font-size: 1.1rem;
-}
-
-.value-danger {
-    color: #dc3545;
-}
-
-.value-warning {
-    color: #ffc107;
-}
-
-.value-normal {
-    color: #28a745;
-}
-
-.keyword-stats {
-    display: flex;
-    gap: 20px;
-    margin-bottom: 15px;
-}
-
-.keyword-stat-item {
-    background-color: #f9f9f9;
-    border: 1px solid #eee;
-    border-radius: 5px;
-    padding: 10px;
-    flex: 1;
-}
-
-.keyword-stat-label {
-    font-size: 0.85rem;
-    color: #666;
-    margin-bottom: 5px;
-}
-
-.keyword-stat-value {
-    font-weight: bold;
-    font-size: 1.1rem;
-}
-
-.keyword-list {
-    margin-top: 10px;
-}
-
-.conspiracy-analysis-info {
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px dashed #ddd;
-    font-size: 0.85rem;
-    color: #666;
-}
-
-/* 图表容器样式调整 */
-#conspiracyChartContainer {
-    margin-top: 20px;
-    margin-bottom: 20px;
-}
-
-/* 确保饼图容器有固定高度且居中 */
-#conspiracyChartContainer > div {
-    height: 250px; /* 减小高度 */
-    position: relative;
-    margin: 0 auto;
-    display: flex;
-    align-items: center; /* 垂直居中 */
-    justify-content: center; /* 水平居中 */
-}
-
-/* 调整雷达图容器样式 */
-.conspiracy-chart-container {
-    margin-top: 20px;
-    background-color: white;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    height: 400px; /* 固定高度 */
-    position: relative;
-}
-
-.conspiracy-chart-container h5 {
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #eee;
-}
-
-#conspiracyDetailChart {
-    height: 300px !important;
-    width: 100% !important;
-}
-
-/* 统计面板中的阴谋论统计文本颜色 */
-.conspiracy-confirmed-text {
-    color: #dc3545;
+  background-color: #fff3cd;
+  border-color: #ffeeba;
 }
 
 .conspiracy-suspect-text {
-    color: #ffc107;
+  color: #ffc107;
+}
+
+.conspiracy-normal {
+  background-color: #d4edda;
+  border-color: #c3e6cb;
 }
 
 .conspiracy-normal-text {
-    color: #28a745;
+  color: #28a745;
 }
 
-.conspiracy-percentage {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 2px solid #eee;
-    font-weight: bold;
+.conspiracy-group-header {
+  font-weight: bold;
+  color: white;
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 4px 4px 0 0;
 }
 
-/* 优化起始URL列表样式 */
-.initial-urls-list {
-    max-height: 200px;
-    overflow-y: auto;
-    margin-top: 5px;
-    border-radius: 4px;
-    background-color: #f9f9f9;
+.conspiracy-group-header i {
+  margin-right: 8px;
 }
 
-.stats-row.url-row {
-    display: flex;
-    padding: 8px 10px;
-    border-bottom: 1px solid #e5e5e5;
+.conspiracy-item {
+  padding-left: 25px;
+  border-left-width: 3px;
+  cursor: pointer;
+}
+
+.conspiracy-item-title {
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conspiracy-item-url {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conspiracy-item-score {
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.conspiracy-item:hover {
+  filter: brightness(0.95);
+}
+
+.conspiracy-item.active {
+  filter: brightness(0.9);
+}
+
+/* 统计视图样式 */
+.stats-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.stats-card {
+  background-color: rgba(248, 249, 250, 0.9); /* 更透明 */
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  flex: 1;
+  min-width: 250px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08); /* 增强阴影 */
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stats-title {
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e0e0e0;
+  color: #495057;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px dashed #e0e0e0;
+}
+
+.stats-row:last-child {
+  border-bottom: none;
+}
+
+.stats-value {
+  font-weight: 600;
+}
+
+/* 图表容器 */
+.chart-container {
+  height: 300px;
+  margin: 20px 0;
+}
+
+/* 响应式调整 */
+@media (max-width: 992px) {
+  .col-lg-3 {
+    margin-bottom: 20px;
+  }
+  
+  .category-item-preview {
+    width: 100%;
+  }
+  
+  header .d-flex {
+    flex-direction: column;
     align-items: flex-start;
+  }
+  
+  header h1 {
+    margin-bottom: 15px;
+  }
 }
 
-.stats-row.url-row:last-child {
-    border-bottom: none;
+@media (max-width: 576px) {
+  .stats-card {
+    min-width: 100%;
+  }
+  
+  .dropdown-menu.settings-dropdown {
+    width: 100%;
+    max-width: 300px;
+  }
 }
 
-.stats-row.url-row:hover {
-    background-color: #f0f0f0;
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.url-number {
-    flex: 0 0 24px;
-    font-size: 0.85rem;
-    color: #666;
-    text-align: center;
-    background-color: #e9ecef;
-    border-radius: 3px;
-    padding: 2px 4px;
-    margin-right: 8px;
-    font-weight: bold;
-    height: 22px;
-    line-height: 18px;
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
 }
 
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* 图片模态框 */
+.image-modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  justify-content: center;
+  align-items: center;
+}
+
+.image-modal-content {
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.image-modal.show {
+  display: flex;
+}
+
+/* 增强卡片样式 */
+.card {
+  background-color: rgba(255, 255, 255, 0.95); /* 更高不透明度 */
+  border: 1px solid rgba(0, 0, 0, 0.125);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 主题黑暗模式下的卡片样式 */
+.theme-dark .card {
+  background-color: rgba(45, 45, 45, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.125);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 修改背景遮罩层透明度 */
+#background-overlay {
+  background-color: rgba(255, 255, 255, 0.3); /* 降低透明度 */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* 深色主题下的遮罩层 */
+.theme-dark #background-overlay {
+  background-color: rgba(0, 0, 0, 0.3); /* 降低透明度 */
+}
+
+footer {
+  margin-bottom: 0! important;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  /* 不再使用固定height */
+  /* height: 50px; */
+  /* line-height: 50px; */
+
+  padding: 10px 0;                 /* 用内边距控制高度 */
+  background-color: rgba(45, 50, 51, 0.5);
+  color: #fff;
+  text-align: center;
+  z-index: 1000;
+}
+
+/* 主要内容容器留出底部空间 */
+main {
+  padding-bottom: 70px; /* 以免footer遮挡正文 */
+}
+
+/* 如果要针对具有 py-3 mb-4 border-bottom 的 header */
+header.py-3.mb-4.border-bottom {
+  padding-left: 15px !important;
+  padding-right: 15px !important;
+}
+
+.my-4 {
+  margin-bottom: 0 !important;
+}
+
+.content-opacity-100 footer {
+  background-color: rgba(var(--bg-rgb), 1.0) !important;
+}
+
+.content-opacity-90 footer {
+  background-color: rgba(var(--bg-rgb), 0.9) !important;
+}
+
+.content-opacity-80 footer {
+  background-color: rgba(var(--bg-rgb), 0.8) !important;
+}
+
+.content-opacity-70 footer {
+  background-color: rgba(var(--bg-rgb), 0.7) !important;
+}
+
+/* 允许 stats-row 内文本换行 */
+.stats-row.url-row {
+  white-space: normal !important; /* 强制允许换行 */
+  flex-wrap: wrap; /* 如果是flex布局，可加上这一行 */
+}
+
+/* 链接本身强制换行 */
 .initial-url {
-    word-break: break-all;
-    font-family: monospace;
-    font-size: 0.9rem;
-    flex: 1;
-    padding: 2px 0;
-    color: #0066cc;
+  word-break: break-all;       /* 强制长词换行 */
+  overflow-wrap: break-word;   /* 或者 break-word; 表示在需要时断行 */
+  max-width: 100%;            /* 防止超出容器宽度 */
+  display: inline-block;       /* 让其遵从 max-width 约束 */
 }
 
-/* 可选：添加一个显示所有URL的展开/折叠功能 */
-.initial-urls-list.collapsed {
-    max-height: 100px;
+#conspiracyContent {
+  display: flex;
+  flex-wrap: wrap; /* 如果内容太宽可以换行 */
+  gap: 20px;
 }
 
-.urls-toggle-btn {
-    background: none;
-    border: none;
-    color: #0d6efd;
-    font-size: 0.85rem;
-    padding: 0;
-    margin-top: 5px;
-    cursor: pointer;
-    text-decoration: underline;
+.conspiracy-detail,
+.conspiracy-chart-container {
+  flex: 1;
+  min-width: 300px; /* 根据需要设定最小宽度 */
+}
+
+.conspiracy-chart-container {
+  flex: none;           /* 不让容器自动扩展 */
+  max-height: 500px;     /* 限制容器最大高度 */
+  overflow-y: auto;      /* 超出部分出现滚动条 */
 }

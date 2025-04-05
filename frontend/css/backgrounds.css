@@ -1,0 +1,251 @@
+/* backgrounds.css - 自定义背景图片样式 */
+
+/* 无背景选项样式 */
+.bg-image-none {
+    background-image: none !important;
+    /* 注意：背景颜色将由JavaScript根据当前主题动态设置 */
+    /* 这里只提供默认主题的背景色作为回退值 */
+    background-color: var(--bg-color, #f8f9fa) !important;
+}
+
+.bg-image-anime1 {
+    background-image: url('https://source.unsplash.com/1600x900/?anime,japan');
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.bg-image-anime2 {
+    background-image: url('https://source.unsplash.com/1600x900/?manga,illustration');
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.bg-image-abstract {
+    background-image: url('https://source.unsplash.com/1600x900/?abstract,digital');
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.bg-image-landscape {
+    background-image: url('https://source.unsplash.com/1600x900/?landscape,nature');
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.bg-image-tech {
+    background-image: url('https://source.unsplash.com/1600x900/?technology,digital');
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.bg-image-custom {
+    /* 用户自定义背景，通过JavaScript设置 */
+    background-attachment: fixed !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    /* 确保背景优先级高 */
+    z-index: -1;
+}
+
+/* 新增：背景遮罩层，用于降低背景图片对内容的干扰 */
+#background-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.3);
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* 背景透明度选项 - 应用到内容容器 */
+.content-opacity-100 .card,
+.content-opacity-100 .sidebar-section .card,
+.content-opacity-100 .accordion-item {
+    background-color: rgba(var(--bg-rgb), 1.0);
+}
+
+.content-opacity-90 .card,
+.content-opacity-90 .sidebar-section .card,
+.content-opacity-90 .accordion-item {
+    background-color: rgba(var(--bg-rgb), 0.9);
+}
+
+.content-opacity-80 .card,
+.content-opacity-80 .sidebar-section .card,
+.content-opacity-80 .accordion-item {
+    background-color: rgba(var(--bg-rgb), 0.8);
+}
+
+.content-opacity-70 .card,
+.content-opacity-70 .sidebar-section .card,
+.content-opacity-70 .accordion-item {
+    background-color: rgba(var(--bg-rgb), 0.7);
+}
+
+/* 内容区域的玻璃态效果 */
+.glass-effect .card,
+.glass-effect .sidebar-section .card,
+.glass-effect .accordion-item {
+    background-color: rgba(var(--bg-rgb), 0.7) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+/* 确保所有主题都定义了RGB值以支持透明度 */
+.theme-default {
+    --bg-rgb: 248, 249, 250;
+    /* 其他主题变量... */
+}
+
+.theme-dark {
+    --bg-rgb: 33, 37, 41;
+    /* 其他主题变量... */
+}
+
+.theme-blue {
+    --bg-rgb: 230, 242, 255;
+    /* 其他主题变量... */
+}
+
+.theme-purple {
+    --bg-rgb: 245, 240, 250;
+    /* 其他主题变量... */
+}
+
+.theme-green {
+    --bg-rgb: 230, 247, 239;
+    /* 其他主题变量... */
+}
+
+/* 添加自定义背景设置区域 */
+.background-settings {
+    margin-top: 15px;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border, #dee2e6);
+    background-color: var(--card-bg, #ffffff);
+}
+
+.background-preview {
+    width: 100%;
+    height: 100px;
+    margin: 10px 0;
+    border-radius: 5px;
+    border: 1px solid var(--card-border, #dee2e6);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.background-options, .opacity-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 15px 0;
+}
+
+.bg-option, .opacity-option {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid transparent;
+    font-weight: bold;
+    transition: transform 0.2s;
+}
+
+.bg-option:hover, .opacity-option:hover {
+    transform: scale(1.1);
+}
+
+.bg-option.active, .opacity-option.active {
+    border-color: var(--primary-color, #0d6efd);
+}
+
+/* 背景选项预览图 */
+.bg-option[data-bg="bg-image-none"] {
+    background-color: #f8f9fa;
+    color: #333;
+}
+
+.bg-option[data-bg="bg-image-anime1"] {
+    background-image: url('https://source.unsplash.com/80x80/?anime,japan');
+    background-size: cover;
+}
+
+.bg-option[data-bg="bg-image-anime2"] {
+    background-image: url('https://source.unsplash.com/80x80/?manga,illustration');
+    background-size: cover;
+}
+
+.bg-option[data-bg="bg-image-abstract"] {
+    background-image: url('https://source.unsplash.com/80x80/?abstract,digital');
+    background-size: cover;
+}
+
+.bg-option[data-bg="bg-image-tech"] {
+    background-image: url('https://source.unsplash.com/80x80/?technology,digital');
+    background-size: cover;
+}
+
+.bg-option[data-bg="bg-image-custom"] {
+    background-color: #e9ecef;
+    color: #333;
+}
+
+/* 文件上传控件样式 */
+.image-upload-label {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    text-align: center;
+    background-color: var(--hover-bg, #f8f9fa);
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 10px 0;
+    transition: all 0.2s ease;
+}
+
+.image-upload-label:hover {
+    background-color: var(--active-bg, #e9ecef);
+}
+
+/* 适配深色主题下的背景遮罩 */
+.theme-dark #background-overlay {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* 主题切换时的平滑过渡 */
+body {
+    transition: background-color 0.3s, background-image 0.3s, color 0.3s;
+}
+
+/* 适配移动设备 */
+@media (max-width: 768px) {
+    .bg-option, .opacity-option {
+        width: 30px;
+        height: 30px;
+    }
+    
+    .background-options, .opacity-options {
+        gap: 5px;
+    }
+}
