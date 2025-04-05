@@ -905,7 +905,17 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const div = document.createElement('div');
         div.innerHTML = `
-            <h4 class="content-title">${item.title || '无标题'}</h4>
+            <h4 class="content-title">
+                ${item.title || '无标题'}
+                <div class="float-end">
+                    <button class="btn btn-sm btn-outline-primary download-html-btn" data-content-id="${item.url}">
+                        <i class="bi bi-file-earmark-code"></i> 下载HTML
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary download-txt-btn" data-content-id="${item.url}">
+                        <i class="bi bi-file-earmark-text"></i> 下载TXT
+                    </button>
+                </div>
+            </h4>
             <div class="content-info">
                 <div class="url-info">URL: <a href="${item.url}" target="_blank">${item.url}</a></div>
                 <div class="status-info">状态: ${item.status || '未知'}</div>
@@ -924,9 +934,89 @@ document.addEventListener('DOMContentLoaded', function() {
         
         contentPreview.innerHTML = '';
         contentPreview.appendChild(div);
+
+        // 添加下载按钮事件处理
+        const htmlBtn = contentPreview.querySelector('.download-html-btn');
+        const txtBtn = contentPreview.querySelector('.download-txt-btn');
+        
+        if (htmlBtn) {
+            htmlBtn.addEventListener('click', function() {
+                downloadContent(item, 'html');
+            });
+        }
+        
+        if (txtBtn) {
+            txtBtn.addEventListener('click', function() {
+                downloadContent(item, 'txt');
+            });
+        }
         
         // 内容渲染后设置图片点击事件
         setTimeout(setupImageClickHandlers, 100);
+
+        // 添加下载内容的函数
+        function downloadContent(item, format) {
+            if (!item || !item.content) {
+                alert('没有内容可下载');
+                return;
+            }
+            
+            let content = item.content;
+            let filename = generateFilename(item.title || '无标题', format);
+            let mimeType = 'text/plain';
+            
+            if (format === 'html') {
+                // 如果内容不是HTML格式，转换为简单的HTML
+                if (!content.includes('<')) {
+                    content = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>${item.title || '无标题'}</title>
+        </head>
+        <body>
+            <h1>${item.title || '无标题'}</h1>
+            <div>${content.replace(/\n/g, '<br>')}</div>
+            <div>URL: <a href="${item.url}">${item.url}</a></div>
+        </body>
+        </html>`;
+                }
+                mimeType = 'text/html';
+            } else {
+                // 如果内容是HTML格式，提取纯文本
+                if (content.includes('<')) {
+                    // 创建临时元素来提取文本
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = content;
+                    content = tempDiv.textContent || tempDiv.innerText || '';
+                }
+            }
+            
+            // 创建Blob并下载
+            const blob = new Blob([content], {type: mimeType});
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            
+            // 清理
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+        
+        // 生成文件名
+        function generateFilename(title, format) {
+            // 清理标题中的特殊字符
+            const cleanTitle = title.replace(/[^\w\s]/gi, '').replace(/\s+/g, '_');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            return `${cleanTitle}_${timestamp}.${format}`;
+        }
+
     }
     
     // 渲染分类列表 - 修改版
