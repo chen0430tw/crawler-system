@@ -198,6 +198,28 @@ class WebCrawler:
                 'Upgrade-Insecure-Requests': '1'
             }
             
+            # 针对维基百科的特殊处理
+            if 'wikipedia.org' in url:
+                if 'zh.wikipedia.org' in url:
+                    # 将语言设置为中文优先
+                    headers['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8'
+                elif 'ja.wikipedia.org' in url:
+                    # 将语言设置为日文优先
+                    headers['Accept-Language'] = 'ja;q=0.9,en;q=0.8,zh;q=0.7'
+                elif 'ko.wikipedia.org' in url:
+                    # 将语言设置为韩文优先
+                    headers['Accept-Language'] = 'ko;q=0.9,en;q=0.8,zh;q=0.7'
+                    
+                # 添加维基百科特有的请求头
+                headers['DNT'] = '1'  # 请勿跟踪
+                headers['Sec-Fetch-Dest'] = 'document'
+                headers['Sec-Fetch-Mode'] = 'navigate'
+                headers['Sec-Fetch-Site'] = 'same-origin'
+                headers['Sec-Fetch-User'] = '?1'
+                
+                # 尝试使用更像浏览器的方式获取页面
+                headers['Cookie'] = 'WMF-Last-Access=05-Apr-2025; WMF-Last-Access-Global=05-Apr-2025'
+                
             # 如果URL不以http开头，添加协议
             if not url.startswith(('http://', 'https://')):
                 url = 'http://' + url
@@ -213,6 +235,11 @@ class WebCrawler:
                 if 'text/html' in content_type or 'application/xhtml+xml' in content_type:
                     # 使用改进的编码检测和处理
                     html_content = self._modern_browser_decode(response, url)
+                    
+                    # 针对维基百科进行额外检查
+                    if 'wikipedia.org' in url and "Please enable JavaScript to view" in html_content:
+                        logger.warning(f"维基百科需要JavaScript: {url}")
+                    
                     return html_content, status_code
                     
                 elif 'application/pdf' in content_type:
@@ -513,7 +540,71 @@ class WebCrawler:
         except Exception as e:
             logger.error(f"解析HTML出错: {url}, 错误: {str(e)}")
             return None, None, []
-    
+
+    def _parse_wikipedia(self, soup, url):
+        """
+        专门处理维基百科页面
+        
+        参数:
+            soup: BeautifulSoup对象
+            url: 原始URL
+        
+        返回:
+            (title, content, links) 元组
+        """
+        # 提取标题
+        title = soup.find(id="firstHeading").text.strip() if soup.find(id="firstHeading") else soup.title.text.strip() if soup.title else "无标题"
+        
+        # 提取正文 - 维基百科的主要内容在id为"mw-content-text"的div中
+        content_div = soup.find(id="mw-content-text")
+        
+        if not content_div:
+            logger.warning(f"无法找到维基百科主要内容区域: {url}")
+            return title, "无法提取维基百科内容", []
+        
+        # 提取段落，保留标题结构
+        content_parts = []
+        
+        # 添加导言
+        intro_paragraphs = content_div.select(".mw-parser-output > p")
+        for p in intro_paragraphs:
+            if p.text.strip():
+                # 检查是否是参考文献或其他不相关段落
+                if not any(cls in p.get("class", []) for cls in ["mw-empty-elt"]):
+                    content_parts.append(p.text.strip())
+                    
+        # 提取各章节（跳过目录、参考文献等）
+        for section in content_div.select(".mw-parser-output > h2, .mw-parser-output > h3"):
+            # 获取章节标题
+            section_title = section.find("span", class_="mw-headline")
+            if section_title:
+                # 排除不需要的章节如"参考文献"、"外部链接"等
+                if section_title.text.strip() not in ["参考文献", "参考", "引用", "外部链接", "参见", "脚注", "注释"]:
+                    content_parts.append(f"\n## {section_title.text.strip()}")
+                    
+                    # 获取该章节的段落
+                    next_elem = section.next_sibling
+                    while next_elem and next_elem.name not in ["h2", "h3"]:
+                        if next_elem.name == "p" and next_elem.text.strip():
+                            content_parts.append(next_elem.text.strip())
+                        next_elem = next_elem.next_sibling
+        
+        # 提取链接
+        links = []
+        for a_tag in soup.find_all('a', href=True):
+            href = a_tag['href']
+            # 处理维基百科内部链接
+            if href.startswith('/wiki/') and ':' not in href:  # 排除如File:、Special:等特殊页面
+                href = f"https://{urlparse(url).netloc}{href}"
+                links.append(href)
+            # 处理外部链接
+            elif href.startswith(('http://', 'https://')):
+                links.append(href)
+        
+        content = "\n\n".join(content_parts)
+        
+        return title, content, links
+
     def crawl(self, url, depth=1):
         """
         爬取网页，支持深度爬取
