@@ -171,14 +171,7 @@ class WebCrawler:
         
     def download_page(self, url, retry_count=0):
         """
-        下载网页内容
-        
-        参数:
-            url: 网页URL
-            retry_count: 当前重试次数
-            
-        返回:
-            (html_content, status_code) 元组，失败返回 (None, status_code)
+        下载网页内容，改进维基百科处理
         """
         if retry_count >= self.max_retries:
             logger.error(f"达到最大重试次数 {self.max_retries}，放弃URL: {url}")
@@ -195,7 +188,13 @@ class WebCrawler:
                 'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6,ko;q=0.5',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'max-age=0',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'DNT': '1'
             }
             
             # 针对维基百科的特殊处理
@@ -209,16 +208,9 @@ class WebCrawler:
                 elif 'ko.wikipedia.org' in url:
                     # 将语言设置为韩文优先
                     headers['Accept-Language'] = 'ko;q=0.9,en;q=0.8,zh;q=0.7'
-                    
-                # 添加维基百科特有的请求头
-                headers['DNT'] = '1'  # 请勿跟踪
-                headers['Sec-Fetch-Dest'] = 'document'
-                headers['Sec-Fetch-Mode'] = 'navigate'
-                headers['Sec-Fetch-Site'] = 'same-origin'
-                headers['Sec-Fetch-User'] = '?1'
                 
-                # 尝试使用更像浏览器的方式获取页面
-                headers['Cookie'] = 'WMF-Last-Access=05-Apr-2025; WMF-Last-Access-Global=05-Apr-2025'
+                # 添加一些前端浏览请求常见参数
+                headers['Referer'] = 'https://www.google.com/'
                 
             # 如果URL不以http开头，添加协议
             if not url.startswith(('http://', 'https://')):
@@ -236,9 +228,20 @@ class WebCrawler:
                     # 使用改进的编码检测和处理
                     html_content = self._modern_browser_decode(response, url)
                     
-                    # 针对维基百科进行额外检查
-                    if 'wikipedia.org' in url and "Please enable JavaScript to view" in html_content:
-                        logger.warning(f"维基百科需要JavaScript: {url}")
+                    # 针对维基百科，保存全量原始HTML
+                    if 'wikipedia.org' in url:
+                        logger.info(f"处理维基百科页面: {url}, 内容长度: {len(html_content)}")
+                        
+                        # 检查内容长度是否充分
+                        if len(html_content) < 1000:
+                            logger.warning(f"维基百科内容异常短: {len(html_content)} 字符")
+                            
+                            # 再次尝试，使用不同的解码方式
+                            try:
+                                html_content = response.text
+                                logger.info(f"使用response.text重试，获取到内容长度: {len(html_content)}")
+                            except Exception as e:
+                                logger.error(f"使用response.text获取内容失败: {str(e)}")
                     
                     return html_content, status_code
                     
