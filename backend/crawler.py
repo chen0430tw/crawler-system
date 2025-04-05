@@ -200,9 +200,13 @@ class WebCrawler:
                     # 使用 chardet 检测编码
                     import chardet
                     detected = chardet.detect(response.content)
-                    encoding = detected.get('encoding', 'utf-8')
-                    response.encoding = encoding
+                    logger.info(f"chardet.detect => {detected}")
+                    encoding = detected.get('encoding')
+                    if not encoding:
+                        encoding = 'utf-8'  # 或者根据目标网站调整为其他编码，如 'gb18030'
+                    # response.encoding = encoding  # 这行可以保留以便后续调试，但不必依赖 response.text
                     logger.info(f"检测到编码: {encoding} (apparent: {response.apparent_encoding})")
+                    decoded_text = response.content.decode(encoding, errors='replace')
                     return response.text, status_code
                 elif 'application/pdf' in content_type:
                 
@@ -494,11 +498,11 @@ class DataProcessor:
     def clean_html(self, html_content, base_url=None):
         """
         清洗HTML内容，移除导航栏、广告、页脚等，但保留媒体内容的引用
-        
+    
         参数:
             html_content: 原始HTML内容
             base_url: HTML内容的基础URL，用于转换相对URL
-            
+    
         返回:
             清洗后的HTML内容
         """
@@ -507,7 +511,7 @@ class DataProcessor:
         
         # 处理特殊内容类型
         if isinstance(html_content, str) and (html_content.startswith("PDF_CONTENT_") or
-                                             html_content.startswith("UNSUPPORTED_CONTENT_")):
+                                                html_content.startswith("UNSUPPORTED_CONTENT_")):
             return html_content
         
         try:
@@ -515,6 +519,9 @@ class DataProcessor:
             
             # 提取内嵌媒体内容（在删除前）
             media = extract_embedded_media(html_content, base_url)
+    
+            # 先提取 <noscript> 标签内的内容，因为后面会删除这些标签
+            noscript_content = "\n".join(tag.get_text(strip=True) for tag in soup.find_all("noscript"))
             
             # 移除常见噪声元素
             noise_tags = [
@@ -522,7 +529,6 @@ class DataProcessor:
                 'noscript', 'meta', 'svg'
             ]
             # 注意：这里不再删除iframe，以保留视频嵌入
-            
             for tag in noise_tags:
                 for element in soup.find_all(tag):
                     element.decompose()
@@ -532,7 +538,6 @@ class DataProcessor:
                 'ad', 'ads', 'advertisement', 'banner', 'social',
                 'sidebar', 'footer', 'header', 'nav', 'menu'
             ]
-            
             for cls in ad_classes:
                 for element in soup.find_all(class_=re.compile(cls, re.I)):
                     element.decompose()
@@ -556,7 +561,6 @@ class DataProcessor:
                 # 转换其他可能的相对URL资源
                 for elem in soup.find_all(src=True):
                     elem['src'] = urljoin(base_url, elem['src'])
-                
                 for elem in soup.find_all(href=True):
                     elem['href'] = urljoin(base_url, elem['href'])
             
@@ -606,16 +610,18 @@ class DataProcessor:
                     media_html += '</ul>\n'
                 
                 media_html += '</div>'
-                
-                # 将媒体引用添加到清洗后的HTML末尾
                 clean_html += media_html
+            
+            # 将 <noscript> 标签中的内容追加到清洗后的HTML末尾
+            if noscript_content:
+                clean_html += "\n" + noscript_content
             
             return clean_html
             
         except Exception as e:
             logger.error(f"清洗HTML出错: {str(e)}")
             return html_content
-    
+
     def extract_text_from_html(self, html_content):
         """
         从HTML提取纯文本

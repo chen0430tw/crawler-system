@@ -227,6 +227,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 自动切换到内容标签页
                 const contentTab = document.getElementById('content-tab');
                 contentTab.click();
+        
+                // 重置文件输入控件，确保可以再次上传同一个文件
+                resultFile.value = "";
             } catch (error) {
                 console.error("解析JSON失败:", error);
                 alert('无法解析结果文件: ' + error.message);
