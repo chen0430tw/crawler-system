@@ -296,8 +296,8 @@ const languageTexts = {
     
     // 页脚
     'footer': {
-        'zh': '全息拉普拉斯互联网爬虫系统 &copy; 2023-2025',
-        'en': 'Holographic Laplace Internet Crawler System &copy; 2023-2025'
+        'zh': '全息拉普拉斯互联网爬虫系统 ©; 2023-2025',
+        'en': 'Holographic Laplace Internet Crawler System ©; 2023-2025'
     }
 };
 
