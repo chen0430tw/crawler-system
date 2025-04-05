@@ -197,14 +197,15 @@ class WebCrawler:
                 
                 # 如果是网页内容
                 if 'text/html' in content_type or 'application/xhtml+xml' in content_type:
-                    # 自动检测编码（如 gb2312, gbk）
-                    response.encoding = response.apparent_encoding
-                    return response.text, status_code
-                
-                # 允许处理HTML和PDF等内容
-                if 'text/html' in content_type or 'application/xhtml+xml' in content_type:
+                    # 使用 chardet 检测编码
+                    import chardet
+                    detected = chardet.detect(response.content)
+                    encoding = detected.get('encoding', 'utf-8')
+                    response.encoding = encoding
+                    logger.info(f"检测到编码: {encoding} (apparent: {response.apparent_encoding})")
                     return response.text, status_code
                 elif 'application/pdf' in content_type:
+                
                     # 标记为PDF并返回内容
                     logger.info(f"检测到PDF文件: {url}")
                     return f"PDF_CONTENT_{url}", status_code
