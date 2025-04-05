@@ -149,9 +149,22 @@ class WebCrawler:
         ]
         
     def _get_random_user_agent(self):
-        """获取随机用户代理"""
-        return random.choice(self.user_agents)
-        
+        """获取随机用户代理，模拟现代浏览器"""
+        modern_user_agents = [
+            # Chrome
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            # Firefox
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0',
+            # Safari
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15',
+            # Edge
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+        ]
+        return random.choice(modern_user_agents)
+
     def _get_random_delay(self, min_delay=1, max_delay=3):
         """获取随机延迟时间"""
         return random.uniform(min_delay, max_delay)
@@ -175,10 +188,11 @@ class WebCrawler:
         time.sleep(self._get_random_delay())
         
         try:
+            # 使用现代浏览器的请求头
             headers = {
                 'User-Agent': self._get_random_user_agent(),
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6,ko;q=0.5',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1'
@@ -197,19 +211,11 @@ class WebCrawler:
                 
                 # 如果是网页内容
                 if 'text/html' in content_type or 'application/xhtml+xml' in content_type:
-                    # 使用 chardet 检测编码
-                    import chardet
-                    detected = chardet.detect(response.content)
-                    logger.info(f"chardet.detect => {detected}")
-                    encoding = detected.get('encoding')
-                    if not encoding:
-                        encoding = 'utf-8'  # 或者根据目标网站调整为其他编码，如 'gb18030'
-                    # response.encoding = encoding  # 这行可以保留以便后续调试，但不必依赖 response.text
-                    logger.info(f"检测到编码: {encoding} (apparent: {response.apparent_encoding})")
-                    decoded_text = response.content.decode(encoding, errors='replace')
-                    return response.text, status_code
+                    # 使用改进的编码检测和处理
+                    html_content = self._modern_browser_decode(response, url)
+                    return html_content, status_code
+                    
                 elif 'application/pdf' in content_type:
-                
                     # 标记为PDF并返回内容
                     logger.info(f"检测到PDF文件: {url}")
                     return f"PDF_CONTENT_{url}", status_code
@@ -238,7 +244,193 @@ class WebCrawler:
         except Exception as e:
             logger.error(f"下载出错: {url}, 错误: {str(e)}")
             return None, 0
+
+    def _modern_browser_decode(self, response, url):
+        """
+        模拟现代浏览器的编码检测和解码流程
+        """
+        from urllib.parse import urlparse
+        
+        # 步骤1: 尝试从HTTP头部获取编码信息
+        content_type = response.headers.get('Content-Type', '').lower()
+        http_encoding = None
+        if 'charset=' in content_type:
+            http_encoding = content_type.split('charset=')[-1].split(';')[0].strip()
+            logger.info(f"HTTP头部声明的编码: {http_encoding}")
+        
+        # 步骤2: 提取HTML标签中的编码声明
+        meta_encoding = self._extract_meta_encoding(response.content)
+        if meta_encoding:
+            logger.info(f"Meta标签中声明的编码: {meta_encoding}")
+        
+        # 步骤3: 使用chardet进行编码检测
+        import chardet
+        detected = chardet.detect(response.content)
+        detected_encoding = detected.get('encoding')
+        confidence = detected.get('confidence', 0)
+        logger.info(f"Chardet检测编码: {detected_encoding} (置信度: {confidence:.2f})")
+        
+        # 特殊处理日韩文字的网站
+        domain = urlparse(url).netloc.lower()
+        is_japanese = any(jp_domain in domain for jp_domain in ['jp', 'nhk.or.jp', 'yahoo.co.jp'])
+        is_korean = any(kr_domain in domain for kr_domain in ['kr', 'line.me', 'naver.com'])
+        
+        # 步骤4: 确定最终使用的编码（优先级：HTTP头部 > HTML meta > 特定域规则 > 检测结果）
+        final_encoding = None
+        
+        # 特殊处理日韩网站
+        if is_japanese and not (http_encoding or meta_encoding):
+            # 日语网站常用编码
+            encodings_to_try = ['shift-jis', 'euc-jp', 'iso-2022-jp', 'utf-8']
+            for enc in encodings_to_try:
+                try:
+                    decoded = response.content.decode(enc, errors='strict')
+                    final_encoding = enc
+                    logger.info(f"日语网站使用的编码: {enc}")
+                    break
+                except UnicodeDecodeError:
+                    continue
+        
+        elif is_korean and not (http_encoding or meta_encoding):
+            # 韩语网站常用编码
+            encodings_to_try = ['euc-kr', 'cp949', 'iso-2022-kr', 'utf-8']
+            for enc in encodings_to_try:
+                try:
+                    decoded = response.content.decode(enc, errors='strict')
+                    final_encoding = enc
+                    logger.info(f"韩语网站使用的编码: {enc}")
+                    break
+                except UnicodeDecodeError:
+                    continue
+        
+        # 如果特定规则未解决，按照现代浏览器优先级处理
+        if not final_encoding:
+            final_encoding = http_encoding or meta_encoding or detected_encoding or 'utf-8'
+        
+        # 步骤5: 使用确定的编码进行解码
+        try:
+            decoded_content = response.content.decode(final_encoding, errors='replace')
+            logger.info(f"最终使用的编码: {final_encoding}")
+        except (UnicodeDecodeError, LookupError):
+            # 如果解码失败，回退到utf-8
+            logger.warning(f"使用 {final_encoding} 解码失败，回退到utf-8")
+            decoded_content = response.content.decode('utf-8', errors='replace')
+        
+        # 步骤6: 修复BOM问题
+        if decoded_content.startswith('\ufeff'):
+            decoded_content = decoded_content[1:]
+            logger.info("移除了文本开头的BOM标记")
+        
+        # 步骤7: 检查解码质量
+        replacement_char_count = decoded_content.count('\ufffd')
+        if replacement_char_count > 0:
+            replacement_ratio = replacement_char_count / len(decoded_content)
+            logger.warning(f"解码结果包含 {replacement_char_count} 个替换字符 (比例: {replacement_ratio:.2%})")
+            
+            # 如果替换字符过多，可能是编码错误，尝试额外的处理
+            if replacement_ratio > 0.1:  # 超过10%的字符是替换字符
+                logger.warning("替换字符比例过高，尝试备用编码方案")
+                # 列出常见编码，按优先级排序
+                backup_encodings = ['utf-8', 'shift-jis', 'euc-jp', 'euc-kr', 'cp949', 'gb18030', 'big5']
+                for enc in backup_encodings:
+                    if enc != final_encoding:  # 避免重复尝试相同的编码
+                        try:
+                            test_decoded = response.content.decode(enc, errors='strict')
+                            # 如果能成功解码且替换字符更少
+                            if test_decoded.count('\ufffd') < replacement_char_count:
+                                decoded_content = test_decoded
+                                logger.info(f"切换到备用编码 {enc} 后替换字符减少")
+                                break
+                        except (UnicodeDecodeError, LookupError):
+                            continue
+        
+        return decoded_content
     
+    def _extract_meta_encoding(self, content):
+        """
+        从HTML内容中提取meta标签中声明的编码
+        """
+        import re
+        
+        # 常规charset声明
+        charset_pattern = re.compile(b'<meta[^>]*charset=[\'"]*([^\'">/]+)[\'"/>]', re.IGNORECASE)
+        
+        # HTTP-EQUIV声明
+        http_equiv_pattern = re.compile(b'<meta[^>]*http-equiv=[\'"]content-type[\'"][^>]*content=[\'"][^"\']*charset=([^\'"]+)[\'"]', re.IGNORECASE)
+        
+        # 反向顺序的HTTP-EQUIV
+        reverse_http_equiv_pattern = re.compile(b'<meta[^>]*content=[\'"][^"\']*charset=([^\'"]+)[\'"][^>]*http-equiv=[\'"]content-type[\'"]', re.IGNORECASE)
+        
+        # HTML5风格
+        html5_pattern = re.compile(b'<meta[^>]*charset=[\'"]([^\'"]+)[\'"]', re.IGNORECASE)
+        
+        # 检查所有模式
+        for pattern in [charset_pattern, http_equiv_pattern, reverse_http_equiv_pattern, html5_pattern]:
+            match = pattern.search(content)
+            if match:
+                detected = match.group(1).decode('ascii', errors='ignore')
+                # 规范化编码名称
+                return self._normalize_encoding_name(detected)
+        
+        return None
+    
+    def _normalize_encoding_name(self, encoding):
+        """
+        规范化编码名称，处理常见别名
+        """
+        if not encoding:
+            return None
+            
+        # 将编码名称转为小写并移除特殊字符
+        normalized = encoding.lower().strip().replace('-', '').replace('_', '')
+        
+        # 编码别名映射
+        encoding_aliases = {
+            'ascii': 'ascii',
+            'usascii': 'ascii',
+            'utf8': 'utf-8',
+            'utf16': 'utf-16',
+            'utf16le': 'utf-16-le',
+            'utf16be': 'utf-16-be',
+            'latin1': 'iso-8859-1',
+            'latin2': 'iso-8859-2',
+            'iso88591': 'iso-8859-1',
+            'iso88592': 'iso-8859-2',
+            'shiftjis': 'shift-jis',
+            'sjis': 'shift-jis',
+            'mskanji': 'shift-jis',
+            'windows31j': 'shift-jis',
+            'eucjp': 'euc-jp',
+            'gb2312': 'gb18030',  # 使用超集
+            'gb18030': 'gb18030',
+            'gbk': 'gb18030',  # 使用超集
+            'big5': 'big5',
+            'big5hkscs': 'big5',
+            'euckr': 'euc-kr',
+            'cp949': 'cp949',
+            'windows949': 'cp949',
+            'ksc56011987': 'euc-kr',
+            'ksc5601': 'euc-kr'
+        }
+        
+        return encoding_aliases.get(normalized, encoding)
+
+    def _extract_meta_encoding(self, content):
+        """从HTML内容中提取meta标签中声明的编码"""
+        import re
+        charset_pattern = re.compile(b'<meta[^>]*charset=[\'"]*([^\'">/]+)[\'"/>]', re.IGNORECASE)
+        content_type_pattern = re.compile(b'<meta[^>]*content=[\'"][^"\']*charset=([^\'"]+)[\'"]', re.IGNORECASE)
+        
+        match = charset_pattern.search(content)
+        if match:
+            return match.group(1).decode('ascii', errors='ignore')
+        
+        match = content_type_pattern.search(content)
+        if match:
+            return match.group(1).decode('ascii', errors='ignore')
+        
+        return None
+
     def parse_html(self, html_content, url):
         """
         解析HTML内容，包括提取内嵌媒体
