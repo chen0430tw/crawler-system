@@ -34,7 +34,7 @@
 1. 下载最新版本的软件包:
 
 ```bash
-git clone https://github.com/your-username/crawler-system.git
+git clone https://github.com/chen0430tw/crawler-system.git
 cd crawler-system
 ```
 

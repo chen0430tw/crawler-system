@@ -7,7 +7,7 @@
 
 /* Body 背景设置 */
 body {
-  background: url('your-background-image.jpg') no-repeat center center fixed;
+  background: none;
   background-size: cover;
   background-color: rgba(248, 249, 250, 0.5); /* 降低透明度 */
   background-blend-mode: normal; /* 改为normal */
