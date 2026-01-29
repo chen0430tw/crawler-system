@@ -251,7 +251,7 @@ const ApiClient = {
                 params.append('title', url);
                 
                 if (options.language) {
-                    params.append('language', options.language);
+                    params.append('lang', options.language);
                 }
             }
             
@@ -323,10 +323,10 @@ const ApiClient = {
             if (category.includes('wikipedia.org')) {
                 params.append('url', category);
             } else {
-                params.append('category', category);
+                params.append('name', category);
                 
                 if (options.language) {
-                    params.append('language', options.language);
+                    params.append('lang', options.language);
                 }
             }
             
@@ -367,7 +367,7 @@ const ApiClient = {
             }
             
             if (options.language) {
-                params.append('language', options.language);
+                params.append('lang', options.language);
             }
             
             if (options.namespace !== undefined) {
@@ -375,13 +375,14 @@ const ApiClient = {
             }
             
             const response = await fetch(`${API_BASE_URL}/wiki/random?${params.toString()}`);
-            
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || '获取随机维基百科页面失败');
             }
-            
-            return await response.json();
+
+            const data = await response.json();
+            return data.pages || [];
         } catch (error) {
             console.error('获取随机维基百科页面出错:', error);
             throw error;
@@ -405,7 +406,7 @@ const ApiClient = {
                 params.append('title', url);
                 
                 if (options.language) {
-                    params.append('language', options.language);
+                    params.append('lang', options.language);
                 }
             }
             
