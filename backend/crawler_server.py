@@ -592,12 +592,27 @@ def wiki_get_page():
     获取维基百科页面详情
     参数:
         title: 页面标题
+        url: 或者提供完整的维基百科URL
         lang: 语言 (默认 zh)
     """
     title = request.args.get('title', '')
+    url = request.args.get('url', '')
     language = request.args.get('lang', 'zh')
 
+    # 如果提供了URL，从URL中提取标题
+    if url and not title:
+        import urllib.parse
+        # 解析 URL 如 https://zh.wikipedia.org/wiki/艾萨克·牛顿
+        if '/wiki/' in url:
+            title = urllib.parse.unquote(url.split('/wiki/')[-1])
+            # 从URL中提取语言
+            if '.wikipedia.org' in url:
+                lang_match = url.split('.wikipedia.org')[0].split('//')[-1]
+                if lang_match and len(lang_match) <= 3:
+                    language = lang_match
+
     if not title:
+        return jsonify({'error': '请提供页面标题或URL'}), 400
         return jsonify({'error': '请提供页面标题'}), 400
 
     try:

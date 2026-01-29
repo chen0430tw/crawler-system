@@ -2378,53 +2378,45 @@ function searchWikipedia(query) {
 
 // 6. 抓取单个维基百科页面
 function fetchWikipediaPage(url) {
-    // 显示提交中提示
+    // 显示抓取中提示
     Swal.fire({
-        title: '提交任务中',
-        text: '正在提交维基百科页面抓取任务，请稍候...',
+        title: '抓取中',
+        text: '正在获取维基百科页面内容，请稍候...',
         allowOutsideClick: false,
         didOpen: () => {
             Swal.showLoading();
         }
     });
-    
+
     // 获取选中的语言
     const language = document.getElementById('wiki-language-selector').value || 'zh';
-    
-    // 配置爬取任务
-    const config = {
-        type: 'wikipedia_page',
-        url: url,
-        language: language,
-        options: {
-            format: 'html'
-        }
-    };
-    
-    // 提交任务
-    ApiClient.submitWikiTask(config)
-        .then(response => {
+
+    // 直接获取页面内容
+    ApiClient.getWikiPage(url, { language: language })
+        .then(pageData => {
             Swal.close();
-            
-            // 显示任务已提交提示
+
+            // 显示页面内容
             Swal.fire({
                 icon: 'success',
-                title: '任务已提交',
-                text: `任务ID: ${response.task_id}`,
-                confirmButtonText: '查看任务状态'
-            }).then(() => {
-                // 切换到维基百科结果标签页
-                document.getElementById('wiki-results-tab').click();
-                
-                // 刷新任务列表
-                refreshWikiTaskList();
+                title: pageData.title || '页面内容',
+                html: `
+                    <div style="text-align: left; max-height: 400px; overflow-y: auto;">
+                        <p><strong>摘要:</strong></p>
+                        <p>${pageData.summary || pageData.extract || '无摘要'}</p>
+                        <hr>
+                        <p><a href="${url}" target="_blank">查看原页面</a></p>
+                    </div>
+                `,
+                confirmButtonText: '确定',
+                width: '600px'
             });
         })
         .catch(error => {
             Swal.fire({
                 icon: 'error',
-                title: '提交失败',
-                text: error.message || '提交任务时发生错误'
+                title: '抓取失败',
+                text: error.message || '获取页面内容时发生错误'
             });
         });
 }
