@@ -1,10 +1,22 @@
 # backend/requirements.txt
+# Web 框架
 flask>=2.0.0
 flask-cors>=3.0.10
+gunicorn>=21.0.0
+
+# 爬虫相关
 requests>=2.26.0
 beautifulsoup4>=4.10.0
+lxml>=4.9.0
+
+# 数据处理
 nltk>=3.6.5
 scikit-learn>=1.0.1
 numpy>=1.19.0
+
+# 编码处理
 chardet>=5.2.0
 Brotli>=1.1.0
+
+# XML 解析 (arXiv)
+feedparser>=6.0.0

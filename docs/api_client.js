@@ -1,7 +1,42 @@
 // api_client.js - 全息拉普拉斯互联网爬虫系统API客户端
 
-// 配置API基础URL - 使用相对路径，这样在Nginx代理后也能正常工作
-const API_BASE_URL = '/api';
+/**
+ * API 配置
+ *
+ * 部署说明：
+ * - 本地开发：使用 '/api'（默认）
+ * - GitHub Pages + 远程后端：改为 'https://your-server.com/api'
+ * - Docker 部署：使用 '/api'（Nginx 会代理）
+ */
+
+// 从 localStorage 读取配置，允许用户动态设置
+const getApiBaseUrl = () => {
+    // 优先使用 localStorage 中的配置
+    const savedUrl = localStorage.getItem('API_BASE_URL');
+    if (savedUrl) {
+        return savedUrl;
+    }
+
+    // 检查是否在 GitHub Pages 上运行
+    if (window.location.hostname.includes('github.io')) {
+        // GitHub Pages 默认无后端，返回空让健康检查失败
+        // 用户需要在设置中配置后端地址
+        return localStorage.getItem('API_BASE_URL') || '';
+    }
+
+    // 本地开发或自托管环境
+    return '/api';
+};
+
+// API 基础 URL
+let API_BASE_URL = getApiBaseUrl();
+
+// 提供方法让用户可以动态配置 API 地址
+const setApiBaseUrl = (url) => {
+    API_BASE_URL = url;
+    localStorage.setItem('API_BASE_URL', url);
+    console.log('API 地址已更新为:', url);
+};
 
 // API接口客户端
 const ApiClient = {
