@@ -1755,6 +1755,662 @@ class WeiboCrawler:
             return []
 
 
+class YouTubeCrawler:
+    """
+    YouTube 爬虫类
+    使用 YouTube Data API 获取视频信息
+    """
+
+    def __init__(self, api_key=None, base_url=None):
+        self.api_key = api_key
+        self.base_url = base_url or 'https://www.googleapis.com/youtube/v3'
+        self.session = requests.Session()
+        logger.info("YouTubeCrawler 初始化完成")
+
+    def search_videos(self, query, max_results=10):
+        """搜索视频"""
+        try:
+            url = f"{self.base_url}/search"
+            params = {
+                'part': 'snippet',
+                'q': query,
+                'type': 'video',
+                'maxResults': max_results,
+                'key': self.api_key
+            }
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            results = []
+            for item in data.get('items', []):
+                snippet = item.get('snippet', {})
+                results.append({
+                    'video_id': item.get('id', {}).get('videoId'),
+                    'title': snippet.get('title'),
+                    'description': snippet.get('description'),
+                    'channel_title': snippet.get('channelTitle'),
+                    'published_at': snippet.get('publishedAt'),
+                    'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url')
+                })
+            return results
+        except Exception as e:
+            logger.error(f"搜索YouTube视频出错: {str(e)}")
+            return []
+
+    def get_video_info(self, video_id):
+        """获取视频详情"""
+        try:
+            url = f"{self.base_url}/videos"
+            params = {
+                'part': 'snippet,statistics,contentDetails',
+                'id': video_id,
+                'key': self.api_key
+            }
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if not data.get('items'):
+                return None
+
+            item = data['items'][0]
+            snippet = item.get('snippet', {})
+            stats = item.get('statistics', {})
+            content = item.get('contentDetails', {})
+
+            return {
+                'video_id': video_id,
+                'title': snippet.get('title'),
+                'description': snippet.get('description'),
+                'channel_title': snippet.get('channelTitle'),
+                'channel_id': snippet.get('channelId'),
+                'published_at': snippet.get('publishedAt'),
+                'tags': snippet.get('tags', []),
+                'view_count': int(stats.get('viewCount', 0)),
+                'like_count': int(stats.get('likeCount', 0)),
+                'comment_count': int(stats.get('commentCount', 0)),
+                'duration': content.get('duration'),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取YouTube视频信息出错: {str(e)}")
+            return None
+
+    def get_channel_info(self, channel_id):
+        """获取频道信息"""
+        try:
+            url = f"{self.base_url}/channels"
+            params = {
+                'part': 'snippet,statistics',
+                'id': channel_id,
+                'key': self.api_key
+            }
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if not data.get('items'):
+                return None
+
+            item = data['items'][0]
+            snippet = item.get('snippet', {})
+            stats = item.get('statistics', {})
+
+            return {
+                'channel_id': channel_id,
+                'title': snippet.get('title'),
+                'description': snippet.get('description'),
+                'custom_url': snippet.get('customUrl'),
+                'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url'),
+                'subscriber_count': int(stats.get('subscriberCount', 0)),
+                'video_count': int(stats.get('videoCount', 0)),
+                'view_count': int(stats.get('viewCount', 0)),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取YouTube频道信息出错: {str(e)}")
+            return None
+
+
+class TiebaCrawler:
+    """
+    百度贴吧爬虫类
+    获取贴吧帖子和评论
+    """
+
+    def __init__(self, base_url=None):
+        self.base_url = base_url or 'https://tieba.baidu.com'
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json, text/plain, */*'
+        })
+        logger.info("TiebaCrawler 初始化完成")
+
+    def get_forum_info(self, forum_name):
+        """获取贴吧信息"""
+        try:
+            url = f"{self.base_url}/f"
+            params = {'kw': forum_name, 'ie': 'utf-8'}
+            response = self.session.get(url, params=params, timeout=15)
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # 提取贴吧信息
+            title = soup.find('a', class_='card_title_fname')
+            member_num = soup.find('span', class_='card_menNum')
+            post_num = soup.find('span', class_='card_infoNum')
+
+            return {
+                'name': forum_name,
+                'title': title.get_text(strip=True) if title else forum_name,
+                'member_count': member_num.get_text(strip=True) if member_num else '0',
+                'post_count': post_num.get_text(strip=True) if post_num else '0',
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取贴吧信息出错: {str(e)}")
+            return None
+
+    def get_forum_posts(self, forum_name, page=1):
+        """获取贴吧帖子列表"""
+        try:
+            url = f"{self.base_url}/f"
+            params = {'kw': forum_name, 'ie': 'utf-8', 'pn': (page - 1) * 50}
+            response = self.session.get(url, params=params, timeout=15)
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            posts = []
+
+            for item in soup.find_all('li', class_='j_thread_list'):
+                title_elem = item.find('a', class_='j_th_tit')
+                author_elem = item.find('span', class_='tb_icon_author')
+                reply_elem = item.find('span', class_='threadlist_rep_num')
+
+                if title_elem:
+                    posts.append({
+                        'title': title_elem.get_text(strip=True),
+                        'url': self.base_url + title_elem.get('href', ''),
+                        'author': author_elem.get_text(strip=True) if author_elem else '',
+                        'reply_count': reply_elem.get_text(strip=True) if reply_elem else '0'
+                    })
+
+            return posts
+        except Exception as e:
+            logger.error(f"获取贴吧帖子列表出错: {str(e)}")
+            return []
+
+    def get_post_detail(self, post_id):
+        """获取帖子详情"""
+        try:
+            url = f"{self.base_url}/p/{post_id}"
+            response = self.session.get(url, timeout=15)
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            title = soup.find('h1', class_='core_title_txt')
+            content_elem = soup.find('div', class_='d_post_content')
+            author_elem = soup.find('a', class_='p_author_name')
+
+            return {
+                'post_id': post_id,
+                'title': title.get_text(strip=True) if title else '',
+                'content': content_elem.get_text(strip=True) if content_elem else '',
+                'author': author_elem.get_text(strip=True) if author_elem else '',
+                'url': url,
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取帖子详情出错: {str(e)}")
+            return None
+
+
+class ArxivCrawler:
+    """
+    arXiv 论文爬虫类
+    使用 arXiv API 获取学术论文
+    """
+
+    def __init__(self, base_url=None):
+        self.base_url = base_url or 'http://export.arxiv.org/api/query'
+        self.session = requests.Session()
+        logger.info("ArxivCrawler 初始化完成")
+
+    def search_papers(self, query, max_results=10, start=0):
+        """搜索论文"""
+        try:
+            params = {
+                'search_query': f'all:{query}',
+                'start': start,
+                'max_results': max_results,
+                'sortBy': 'relevance',
+                'sortOrder': 'descending'
+            }
+            response = self.session.get(self.base_url, params=params, timeout=30)
+
+            soup = BeautifulSoup(response.text, 'xml')
+            papers = []
+
+            for entry in soup.find_all('entry'):
+                authors = [author.find('name').text for author in entry.find_all('author')]
+                categories = [cat.get('term') for cat in entry.find_all('category')]
+
+                papers.append({
+                    'arxiv_id': entry.find('id').text.split('/')[-1] if entry.find('id') else '',
+                    'title': entry.find('title').text.strip() if entry.find('title') else '',
+                    'summary': entry.find('summary').text.strip() if entry.find('summary') else '',
+                    'authors': authors,
+                    'categories': categories,
+                    'published': entry.find('published').text if entry.find('published') else '',
+                    'updated': entry.find('updated').text if entry.find('updated') else '',
+                    'pdf_url': entry.find('link', {'title': 'pdf'}).get('href') if entry.find('link', {'title': 'pdf'}) else ''
+                })
+
+            return papers
+        except Exception as e:
+            logger.error(f"搜索arXiv论文出错: {str(e)}")
+            return []
+
+    def get_paper_by_id(self, arxiv_id):
+        """通过ID获取论文详情"""
+        try:
+            params = {'id_list': arxiv_id}
+            response = self.session.get(self.base_url, params=params, timeout=30)
+
+            soup = BeautifulSoup(response.text, 'xml')
+            entry = soup.find('entry')
+
+            if not entry:
+                return None
+
+            authors = [author.find('name').text for author in entry.find_all('author')]
+            categories = [cat.get('term') for cat in entry.find_all('category')]
+
+            return {
+                'arxiv_id': arxiv_id,
+                'title': entry.find('title').text.strip() if entry.find('title') else '',
+                'summary': entry.find('summary').text.strip() if entry.find('summary') else '',
+                'authors': authors,
+                'categories': categories,
+                'published': entry.find('published').text if entry.find('published') else '',
+                'updated': entry.find('updated').text if entry.find('updated') else '',
+                'pdf_url': entry.find('link', {'title': 'pdf'}).get('href') if entry.find('link', {'title': 'pdf'}) else '',
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取arXiv论文详情出错: {str(e)}")
+            return None
+
+    def get_recent_papers(self, category='cs.AI', max_results=10):
+        """获取特定领域的最新论文"""
+        try:
+            params = {
+                'search_query': f'cat:{category}',
+                'start': 0,
+                'max_results': max_results,
+                'sortBy': 'submittedDate',
+                'sortOrder': 'descending'
+            }
+            response = self.session.get(self.base_url, params=params, timeout=30)
+
+            soup = BeautifulSoup(response.text, 'xml')
+            papers = []
+
+            for entry in soup.find_all('entry'):
+                authors = [author.find('name').text for author in entry.find_all('author')]
+
+                papers.append({
+                    'arxiv_id': entry.find('id').text.split('/')[-1] if entry.find('id') else '',
+                    'title': entry.find('title').text.strip() if entry.find('title') else '',
+                    'summary': entry.find('summary').text.strip()[:500] + '...' if entry.find('summary') else '',
+                    'authors': authors[:5],  # 只取前5个作者
+                    'published': entry.find('published').text if entry.find('published') else ''
+                })
+
+            return papers
+        except Exception as e:
+            logger.error(f"获取最新arXiv论文出错: {str(e)}")
+            return []
+
+
+class DocsCrawler:
+    """
+    软件文档爬虫类
+    支持爬取各类技术文档
+    """
+
+    def __init__(self, base_url=None):
+        self.base_url = base_url
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        })
+        logger.info("DocsCrawler 初始化完成")
+
+    def crawl_docs_page(self, url):
+        """爬取文档页面"""
+        try:
+            response = self.session.get(url, timeout=30)
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # 尝试提取主要内容
+            main_content = (
+                soup.find('main') or
+                soup.find('article') or
+                soup.find('div', class_=re.compile(r'content|docs|documentation', re.I)) or
+                soup.find('div', id=re.compile(r'content|docs|documentation', re.I))
+            )
+
+            title = soup.find('h1')
+
+            # 提取导航链接（用于爬取更多页面）
+            nav_links = []
+            nav = soup.find('nav') or soup.find('aside') or soup.find('div', class_=re.compile(r'sidebar|nav|menu', re.I))
+            if nav:
+                for link in nav.find_all('a', href=True):
+                    href = link.get('href')
+                    if href and not href.startswith(('#', 'javascript:', 'mailto:')):
+                        nav_links.append({
+                            'text': link.get_text(strip=True),
+                            'url': urljoin(url, href)
+                        })
+
+            return {
+                'url': url,
+                'title': title.get_text(strip=True) if title else '',
+                'content': main_content.get_text(strip=True) if main_content else '',
+                'html': str(main_content) if main_content else '',
+                'nav_links': nav_links[:50],  # 限制链接数量
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"爬取文档页面出错: {str(e)}")
+            return None
+
+    def search_docs(self, site_url, query):
+        """搜索文档（通过站内搜索或Google）"""
+        try:
+            # 尝试常见的站内搜索路径
+            search_paths = ['/search', '/docs/search', '/_search', '/api/search']
+
+            for path in search_paths:
+                search_url = urljoin(site_url, path)
+                try:
+                    response = self.session.get(search_url, params={'q': query}, timeout=15)
+                    if response.status_code == 200:
+                        # 简单解析搜索结果
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        results = []
+                        for link in soup.find_all('a', href=True)[:20]:
+                            text = link.get_text(strip=True)
+                            if text and query.lower() in text.lower():
+                                results.append({
+                                    'title': text,
+                                    'url': urljoin(site_url, link.get('href'))
+                                })
+                        if results:
+                            return results
+                except:
+                    continue
+
+            return []
+        except Exception as e:
+            logger.error(f"搜索文档出错: {str(e)}")
+            return []
+
+
+# ===================================
+# 爬虫中台 CrawlerHub
+# 统一管理所有平台爬虫
+# ===================================
+
+class CrawlerHub:
+    """
+    爬虫中台类
+    统一管理所有平台爬虫的注册、获取和配置
+    """
+
+    # 支持的平台列表
+    SUPPORTED_PLATFORMS = {
+        'wikipedia': {
+            'name': 'Wikipedia',
+            'name_cn': '维基百科',
+            'crawler_class': 'WikipediaAPICrawler',
+            'description': '维基百科API爬虫，支持多语言'
+        },
+        'zhihu': {
+            'name': 'Zhihu Zhuanlan',
+            'name_cn': '知乎专栏',
+            'crawler_class': 'ZhihuZhuanlanCrawler',
+            'description': '知乎专栏爬虫'
+        },
+        'moegirl': {
+            'name': 'Moegirl',
+            'name_cn': '萌娘百科',
+            'crawler_class': 'MoegirlCrawler',
+            'description': '萌娘百科MediaWiki爬虫'
+        },
+        'bilibili': {
+            'name': 'Bilibili',
+            'name_cn': '哔哩哔哩',
+            'crawler_class': 'BilibiliCrawler',
+            'description': 'B站视频/用户爬虫'
+        },
+        'github': {
+            'name': 'GitHub',
+            'name_cn': 'GitHub',
+            'crawler_class': 'GitHubCrawler',
+            'description': 'GitHub仓库/代码爬虫'
+        },
+        'weibo': {
+            'name': 'Weibo',
+            'name_cn': '微博',
+            'crawler_class': 'WeiboCrawler',
+            'description': '微博用户/热搜爬虫'
+        },
+        'youtube': {
+            'name': 'YouTube',
+            'name_cn': 'YouTube',
+            'crawler_class': 'YouTubeCrawler',
+            'description': 'YouTube视频/频道爬虫'
+        },
+        'tieba': {
+            'name': 'Tieba',
+            'name_cn': '百度贴吧',
+            'crawler_class': 'TiebaCrawler',
+            'description': '百度贴吧爬虫'
+        },
+        'arxiv': {
+            'name': 'arXiv',
+            'name_cn': 'arXiv论文',
+            'crawler_class': 'ArxivCrawler',
+            'description': 'arXiv学术论文爬虫'
+        },
+        'docs': {
+            'name': 'Documentation',
+            'name_cn': '软件文档',
+            'crawler_class': 'DocsCrawler',
+            'description': '通用文档爬虫'
+        }
+    }
+
+    def __init__(self, test_mode=False, mock_base_url=None):
+        """
+        初始化爬虫中台
+
+        参数:
+            test_mode: 是否启用测试模式（使用模拟数据）
+            mock_base_url: 测试模式下的模拟API基础URL
+        """
+        self.test_mode = test_mode
+        self.mock_base_url = mock_base_url or 'http://localhost:5000'
+        self._crawlers = {}
+        self._configs = {}
+
+        logger.info(f"CrawlerHub 初始化完成，测试模式: {test_mode}")
+
+    def get_supported_platforms(self):
+        """获取所有支持的平台列表"""
+        return list(self.SUPPORTED_PLATFORMS.keys())
+
+    def get_platform_info(self, platform):
+        """获取平台信息"""
+        return self.SUPPORTED_PLATFORMS.get(platform)
+
+    def _get_base_url(self, platform):
+        """获取平台的API基础URL（测试模式下返回模拟URL）"""
+        if self.test_mode:
+            return f"{self.mock_base_url}/mock/{platform}"
+        return None  # 使用默认URL
+
+    def get_crawler(self, platform, **kwargs):
+        """
+        获取指定平台的爬虫实例
+
+        参数:
+            platform: 平台名称
+            **kwargs: 传递给爬虫构造函数的额外参数
+
+        返回:
+            爬虫实例
+        """
+        if platform not in self.SUPPORTED_PLATFORMS:
+            raise ValueError(f"不支持的平台: {platform}，支持的平台: {list(self.SUPPORTED_PLATFORMS.keys())}")
+
+        # 如果已有缓存的实例且配置相同，直接返回
+        cache_key = f"{platform}_{hash(frozenset(kwargs.items()))}"
+        if cache_key in self._crawlers:
+            return self._crawlers[cache_key]
+
+        # 创建新实例
+        platform_info = self.SUPPORTED_PLATFORMS[platform]
+        crawler_class = globals().get(platform_info['crawler_class'])
+
+        if not crawler_class:
+            raise RuntimeError(f"找不到爬虫类: {platform_info['crawler_class']}")
+
+        # 设置base_url（测试模式）
+        base_url = self._get_base_url(platform)
+        if base_url:
+            kwargs['base_url'] = base_url
+
+        # 创建实例
+        crawler = crawler_class(**kwargs)
+        self._crawlers[cache_key] = crawler
+
+        return crawler
+
+    def set_platform_config(self, platform, config):
+        """
+        设置平台配置
+
+        参数:
+            platform: 平台名称
+            config: 配置字典
+        """
+        if platform not in self.SUPPORTED_PLATFORMS:
+            raise ValueError(f"不支持的平台: {platform}")
+        self._configs[platform] = config
+
+    def get_platform_config(self, platform):
+        """获取平台配置"""
+        return self._configs.get(platform, {})
+
+    def set_test_mode(self, enabled, mock_base_url=None):
+        """
+        设置测试模式
+
+        参数:
+            enabled: 是否启用测试模式
+            mock_base_url: 模拟API基础URL
+        """
+        self.test_mode = enabled
+        if mock_base_url:
+            self.mock_base_url = mock_base_url
+        # 清空缓存的爬虫实例，以便重新创建
+        self._crawlers.clear()
+        logger.info(f"测试模式已{'启用' if enabled else '禁用'}")
+
+    def crawl(self, platform, method, *args, **kwargs):
+        """
+        统一爬取接口
+
+        参数:
+            platform: 平台名称
+            method: 要调用的方法名
+            *args, **kwargs: 方法参数
+
+        返回:
+            爬取结果
+        """
+        crawler = self.get_crawler(platform)
+
+        if not hasattr(crawler, method):
+            raise AttributeError(f"爬虫 {platform} 没有方法: {method}")
+
+        func = getattr(crawler, method)
+        return func(*args, **kwargs)
+
+    def batch_crawl(self, tasks):
+        """
+        批量爬取
+
+        参数:
+            tasks: 任务列表，每个任务是一个字典:
+                {
+                    'platform': 'wikipedia',
+                    'method': 'get_page',
+                    'args': ['Python'],
+                    'kwargs': {'language': 'zh'}
+                }
+
+        返回:
+            结果列表
+        """
+        results = []
+        for task in tasks:
+            try:
+                result = self.crawl(
+                    task['platform'],
+                    task['method'],
+                    *task.get('args', []),
+                    **task.get('kwargs', {})
+                )
+                results.append({
+                    'task': task,
+                    'success': True,
+                    'data': result
+                })
+            except Exception as e:
+                logger.error(f"批量爬取任务失败: {task}, 错误: {str(e)}")
+                results.append({
+                    'task': task,
+                    'success': False,
+                    'error': str(e)
+                })
+        return results
+
+    def get_status(self):
+        """获取爬虫中台状态"""
+        return {
+            'test_mode': self.test_mode,
+            'mock_base_url': self.mock_base_url,
+            'supported_platforms': self.get_supported_platforms(),
+            'active_crawlers': list(self._crawlers.keys()),
+            'configs': self._configs,
+            'timestamp': datetime.now().isoformat()
+        }
+
+    def close(self):
+        """关闭所有爬虫连接"""
+        for crawler in self._crawlers.values():
+            if hasattr(crawler, 'close'):
+                crawler.close()
+            elif hasattr(crawler, 'session'):
+                crawler.session.close()
+        self._crawlers.clear()
+        logger.info("CrawlerHub 已关闭所有连接")
+
+
 class DataProcessor:
     """数据处理类，负责清洗和分类网页内容"""
     
