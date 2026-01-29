@@ -1,0 +1,842 @@
+/* 全局重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Body 背景设置 */
+body {
+  background: url('your-background-image.jpg') no-repeat center center fixed;
+  background-size: cover;
+  background-color: rgba(248, 249, 250, 0.5); /* 降低透明度 */
+  background-blend-mode: normal; /* 改为normal */
+  color: #333;
+  transition: background-color 0.3s, color 0.3s;
+  font-family: sans-serif;
+  line-height: 1.6;
+}
+
+/* 主容器：限制宽度、居中显示并增加内边距 */
+.container-fluid {
+  max-width: 1200px; /* 调整为1200px，避免内容分散 */
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Bootstrap 网格系统调整 */
+.row {
+  margin-left: -15px;
+  margin-right: -15px;
+}
+[class*="col-"] {
+  padding-left: 15px;
+  padding-right: 15px;
+}
+
+/* 设置菜单样式 */
+.settings-dropdown {
+  width: 300px;
+  padding: 15px;
+}
+
+.dropdown-header {
+  font-weight: 600;
+  color: #495057;
+  padding: 8px 0;
+  margin-top: 10px;
+}
+
+.dropdown-header:first-child {
+  margin-top: 0;
+}
+
+/* 背景选项 */
+.background-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.background-options.compact {
+  gap: 5px;
+}
+
+.bg-option {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bg-option.active {
+  border: 2px solid #0d6efd;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+/* 透明度选项 */
+.opacity-options {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.opacity-option {
+  width: 40px;
+  height: 30px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  background-color: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.opacity-option:hover {
+  background-color: #e9ecef;
+}
+
+.opacity-option.active {
+  border-color: #0d6efd;
+  background-color: #e7f1ff;
+  color: #0d6efd;
+  font-weight: bold;
+}
+
+/* 按钮增强效果 */
+.btn {
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-close:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* 表格样式增强 */
+.table thead th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  border-top: none;
+}
+
+.table-hover tbody tr:hover {
+  background-color: rgba(13, 110, 253, 0.05);
+}
+
+/* 当进度条到达100%时的特殊样式 */
+.progress-bar[aria-valuenow="100"] {
+  background-color: #28a745;
+}
+
+/* 头部样式：增加内边距和下边距，确保布局不紧凑 */
+header {
+  background-color: rgba(248, 249, 250, 0.9); /* 增加透明度 */
+  transition: background-color 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  padding: 20px 0;
+  margin-bottom: 20px;
+  border-radius: 8px; /* 添加圆角 */
+}
+
+header h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0;
+}
+
+/* 服务器状态指示器 */
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: background-color 0.3s;
+}
+
+.status-indicator.bg-success {
+  background-color: #28a745;
+}
+
+.status-indicator.bg-danger {
+  background-color: #dc3545;
+}
+
+.status-indicator.bg-secondary {
+  background-color: #6c757d;
+}
+
+/* 上传区域样式：增加内边距、圆角、阴影以及下边距 */
+.upload-area {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  background-color: rgba(249, 249, 249, 0.7); /* 更透明 */
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 20px;
+}
+
+.upload-area:hover,
+.upload-area.dragover {
+  border-color: #6c757d;
+  background-color: rgba(240, 240, 240, 0.8);
+}
+
+.upload-icon {
+  margin-bottom: 15px;
+  color: #6c757d;
+}
+
+/* URL列表样式 */
+.url-item {
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.url-item:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.url-item.active {
+  background-color: rgba(13, 110, 253, 0.1);
+  border-left-color: #0d6efd;
+}
+
+.url-title {
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.url-path {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 内容预览样式 */
+#contentPreview {
+  min-height: 400px;
+}
+
+.content-title {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #ccc;
+}
+
+.content-body {
+  background-color: #fff;
+  padding: 15px;
+  border-radius: 5px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* 分类样式 */
+.category-item {
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.category-item:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.category-item.active {
+  background-color: rgba(13, 110, 253, 0.1);
+  border-left-color: #0d6efd;
+}
+
+.category-title {
+  font-weight: bold;
+}
+
+.category-count {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.category-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.category-item-preview {
+  width: calc(50% - 15px);
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  margin-bottom: 15px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.category-item-preview:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* 关键词标签样式 */
+.keyword {
+  display: inline-block;
+  background-color: #0d6efd;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  margin-right: 5px;
+  margin-bottom: 5px;
+}
+
+/* 折叠面板样式增强 */
+.accordion-button {
+  background-color: #f8f9fa;
+  font-weight: 500;
+}
+
+.accordion-button:not(.collapsed) {
+  background-color: #e7f1ff;
+  color: #0d6efd;
+}
+
+.accordion-button:focus {
+  box-shadow: none;
+  border-color: rgba(13, 110, 253, 0.25);
+}
+
+/* 侧边栏模块样式 */
+.sidebar-section {
+  transition: all 0.3s ease;
+  margin-bottom: 16px;
+}
+
+.sidebar-section .card {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.sidebar-section .card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-section .card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 12px 15px;
+}
+
+/* 阴谋论检测相关样式 */
+.conspiracy-confirmed {
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+}
+
+.conspiracy-confirmed-text {
+  color: #dc3545;
+}
+
+.conspiracy-suspect {
+  background-color: #fff3cd;
+  border-color: #ffeeba;
+}
+
+.conspiracy-suspect-text {
+  color: #ffc107;
+}
+
+.conspiracy-normal {
+  background-color: #d4edda;
+  border-color: #c3e6cb;
+}
+
+.conspiracy-normal-text {
+  color: #28a745;
+}
+
+.conspiracy-group-header {
+  font-weight: bold;
+  color: white;
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 4px 4px 0 0;
+}
+
+.conspiracy-group-header i {
+  margin-right: 8px;
+}
+
+.conspiracy-item {
+  padding-left: 25px;
+  border-left-width: 3px;
+  cursor: pointer;
+}
+
+.conspiracy-item-title {
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conspiracy-item-url {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conspiracy-item-score {
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.conspiracy-item:hover {
+  filter: brightness(0.95);
+}
+
+.conspiracy-item.active {
+  filter: brightness(0.9);
+}
+
+/* 统计视图样式 */
+.stats-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.stats-card {
+  background-color: rgba(248, 249, 250, 0.9); /* 更透明 */
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  flex: 1;
+  min-width: 250px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08); /* 增强阴影 */
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stats-title {
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e0e0e0;
+  color: #495057;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px dashed #e0e0e0;
+}
+
+.stats-row:last-child {
+  border-bottom: none;
+}
+
+.stats-value {
+  font-weight: 600;
+}
+
+/* 图表容器 */
+.chart-container {
+  height: 300px;
+  margin: 20px 0;
+}
+
+/* 响应式调整 */
+@media (max-width: 992px) {
+  .col-lg-3 {
+    margin-bottom: 20px;
+  }
+  
+  .category-item-preview {
+    width: 100%;
+  }
+  
+  header .d-flex {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  header h1 {
+    margin-bottom: 15px;
+  }
+}
+
+@media (max-width: 576px) {
+  .stats-card {
+    min-width: 100%;
+  }
+  
+  .dropdown-menu.settings-dropdown {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* 图片模态框 */
+.image-modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  justify-content: center;
+  align-items: center;
+}
+
+.image-modal-content {
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.image-modal.show {
+  display: flex;
+}
+
+/* 增强卡片样式 */
+.card {
+  background-color: rgba(255, 255, 255, 0.95); /* 更高不透明度 */
+  border: 1px solid rgba(0, 0, 0, 0.125);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 主题黑暗模式下的卡片样式 */
+.theme-dark .card {
+  background-color: rgba(45, 45, 45, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.125);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 修改背景遮罩层透明度 */
+#background-overlay {
+  background-color: rgba(255, 255, 255, 0.3); /* 降低透明度 */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* 深色主题下的遮罩层 */
+.theme-dark #background-overlay {
+  background-color: rgba(0, 0, 0, 0.3); /* 降低透明度 */
+}
+
+footer {
+  margin-bottom: 0 !important;
+  position: fixed !important;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 10px 0;
+  background-color: rgba(45, 50, 51, 0.5);
+  color: #fff;
+  text-align: center;
+  z-index: 1000;
+}
+
+/* 主要内容容器留出底部空间 */
+main {
+  padding-bottom: 70px; /* 以免footer遮挡正文 */
+}
+
+/* 如果要针对具有 py-3 mb-4 border-bottom 的 header */
+header.py-3.mb-4.border-bottom {
+  padding-left: 15px !important;
+  padding-right: 15px !important;
+}
+
+.my-4 {
+  margin-bottom: 0 !important;
+}
+
+.content-opacity-100 footer {
+  background-color: rgba(var(--bg-rgb), 1.0) !important;
+}
+
+.content-opacity-90 footer {
+  background-color: rgba(var(--bg-rgb), 0.9) !important;
+}
+
+.content-opacity-80 footer {
+  background-color: rgba(var(--bg-rgb), 0.8) !important;
+}
+
+.content-opacity-70 footer {
+  background-color: rgba(var(--bg-rgb), 0.7) !important;
+}
+
+/* 允许 stats-row 内文本换行 */
+.stats-row.url-row {
+  white-space: normal !important; /* 强制允许换行 */
+  flex-wrap: wrap; /* 如果是flex布局，可加上这一行 */
+}
+
+/* 链接本身强制换行 */
+.initial-url {
+  word-break: break-all;       /* 强制长词换行 */
+  overflow-wrap: break-word;   /* 或者 break-word; 表示在需要时断行 */
+  max-width: 100%;            /* 防止超出容器宽度 */
+  display: inline-block;       /* 让其遵从 max-width 约束 */
+}
+
+#conspiracyContent {
+  display: flex;
+  flex-wrap: wrap; /* 如果内容太宽可以换行 */
+  gap: 20px;
+}
+
+.conspiracy-detail,
+.conspiracy-chart-container {
+  flex: 1;
+  min-width: 300px; /* 根据需要设定最小宽度 */
+}
+
+.conspiracy-chart-container {
+  flex: none;           /* 不让容器自动扩展 */
+  max-height: 500px;     /* 限制容器最大高度 */
+  overflow-y: auto;      /* 超出部分出现滚动条 */
+}
+
+/* 维基百科功能相关样式 */
+.wiki-page-item, .wiki-category-item {
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.wiki-page-item:hover, .wiki-category-item:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.wiki-page-item.active, .wiki-category-item.active {
+  background-color: rgba(13, 110, 253, 0.1);
+  border-left-color: #0d6efd;
+}
+
+.wiki-page-title, .wiki-category-title {
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wiki-page-url, .wiki-category-url {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wiki-page-container, .wiki-category-container {
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+}
+
+.wiki-page-header, .wiki-category-header {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.wiki-page-content {
+  max-height: 600px;
+  overflow-y: auto;
+  padding: 15px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+.keyword-cloud-fallback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 15px;
+}
+
+.keyword-cloud-item {
+  padding: 4px 8px;
+  background-color: rgba(13, 110, 253, 0.1);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.keyword-cloud-item:hover {
+  background-color: rgba(13, 110, 253, 0.2);
+  transform: scale(1.1);
+}
+
+.wiki-path-container {
+  padding: 15px;
+}
+
+.wiki-path {
+  padding: 15px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+.wiki-path-node {
+  display: flex;
+  align-items: start;
+  padding: 10px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  margin-bottom: 5px;
+}
+
+.wiki-path-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #0d6efd;
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-right: 10px;
+}
+
+.wiki-path-content {
+  flex-grow: 1;
+}
+
+.wiki-path-title {
+  font-weight: bold;
+}
+
+.wiki-path-url {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.wiki-path-connector {
+  display: flex;
+  justify-content: center;
+  padding: 5px 0;
+  color: #666;
+}
+
+.tree-node {
+  margin-bottom: 5px;
+}
+
+.tree-children {
+  margin-left: 20px;
+}
+
+.tree-page {
+  margin-left: 20px;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.structured-info {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.crawl-stats {
+  margin: 15px 0;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+}
+
+/* 修复隐藏的维基百科可视化容器 */
+#wiki-visualization-container {
+  min-height: 500px;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+  overflow: hidden;
+}
