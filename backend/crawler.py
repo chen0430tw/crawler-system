@@ -33,9 +33,10 @@ try:
     from nltk.stem import WordNetLemmatizer
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.cluster import KMeans
+    import wikipediaapi
 except ImportError:
     print("缺少必要的库。请运行以下命令安装依赖:")
-    print("pip install requests beautifulsoup4 nltk scikit-learn")
+    print("pip install requests beautifulsoup4 nltk scikit-learn Wikipedia-API")
     sys.exit(1)
 
 # 创建自定义JSON编码器，处理NumPy类型
@@ -771,6 +772,275 @@ def extract_embedded_media(html_content, base_url=None):
     except Exception as e:
         logger.error(f"提取媒体内容出错: {str(e)}")
         return {}
+
+
+class WikipediaAPICrawler:
+    """
+    基于官方 Wikipedia API 的爬虫类
+    使用 Wikipedia-API 库，比直接爬取网页更稳定可靠
+    """
+
+    # 支持的语言列表
+    SUPPORTED_LANGUAGES = {
+        'zh': '中文',
+        'en': 'English',
+        'ja': '日本語',
+        'ko': '한국어',
+        'fr': 'Français',
+        'de': 'Deutsch',
+        'es': 'Español',
+        'ru': 'Русский'
+    }
+
+    def __init__(self, language='zh', user_agent='HolographicLaplacianCrawler/1.0'):
+        """
+        初始化 Wikipedia API 爬虫
+
+        参数:
+            language: 维基百科语言版本 (默认中文)
+            user_agent: 用户代理标识
+        """
+        self.language = language
+        self.user_agent = user_agent
+        self.wiki = wikipediaapi.Wikipedia(
+            user_agent=user_agent,
+            language=language
+        )
+        logger.info(f"WikipediaAPICrawler 初始化完成，语言: {language}")
+
+    def set_language(self, language):
+        """切换语言版本"""
+        if language in self.SUPPORTED_LANGUAGES:
+            self.language = language
+            self.wiki = wikipediaapi.Wikipedia(
+                user_agent=self.user_agent,
+                language=language
+            )
+            logger.info(f"已切换到 {self.SUPPORTED_LANGUAGES[language]} 维基百科")
+            return True
+        else:
+            logger.warning(f"不支持的语言: {language}")
+            return False
+
+    def search(self, query, limit=10):
+        """
+        搜索维基百科页面
+
+        参数:
+            query: 搜索关键词
+            limit: 返回结果数量限制
+
+        返回:
+            搜索结果列表
+        """
+        try:
+            # Wikipedia-API 不直接支持搜索，使用 MediaWiki API
+            import requests
+            search_url = f"https://{self.language}.wikipedia.org/w/api.php"
+            params = {
+                'action': 'query',
+                'list': 'search',
+                'srsearch': query,
+                'srlimit': limit,
+                'format': 'json'
+            }
+            response = requests.get(search_url, params=params, timeout=10)
+            data = response.json()
+
+            results = []
+            if 'query' in data and 'search' in data['query']:
+                for item in data['query']['search']:
+                    results.append({
+                        'title': item['title'],
+                        'snippet': item.get('snippet', '').replace('<span class="searchmatch">', '').replace('</span>', ''),
+                        'pageid': item['pageid']
+                    })
+
+            logger.info(f"搜索 '{query}' 找到 {len(results)} 个结果")
+            return results
+
+        except Exception as e:
+            logger.error(f"搜索维基百科出错: {str(e)}")
+            return []
+
+    def get_page(self, title):
+        """
+        获取维基百科页面详细内容
+
+        参数:
+            title: 页面标题
+
+        返回:
+            页面信息字典，包含标题、摘要、全文、链接、分类等
+        """
+        try:
+            page = self.wiki.page(title)
+
+            if not page.exists():
+                logger.warning(f"页面不存在: {title}")
+                return None
+
+            result = {
+                'title': page.title,
+                'url': page.fullurl,
+                'summary': page.summary,
+                'text': page.text,
+                'categories': list(page.categories.keys()),
+                'links': list(page.links.keys())[:100],  # 限制链接数量
+                'sections': self._get_sections(page),
+                'language': self.language,
+                'timestamp': datetime.now().isoformat()
+            }
+
+            logger.info(f"获取页面成功: {title}, 内容长度: {len(page.text)}")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取页面出错: {title}, 错误: {str(e)}")
+            return None
+
+    def _get_sections(self, page):
+        """提取页面章节结构"""
+        sections = []
+
+        def extract_sections(section_list, level=0):
+            for section in section_list:
+                sections.append({
+                    'title': section.title,
+                    'level': level,
+                    'text': section.text[:500] if section.text else ''  # 限制长度
+                })
+                if section.sections:
+                    extract_sections(section.sections, level + 1)
+
+        extract_sections(page.sections)
+        return sections
+
+    def get_category_members(self, category_name, depth=0, max_pages=50):
+        """
+        获取分类下的所有页面
+
+        参数:
+            category_name: 分类名称 (不含 "Category:" 前缀)
+            depth: 递归深度 (0 表示只获取当前分类)
+            max_pages: 最大页面数量
+
+        返回:
+            页面列表
+        """
+        try:
+            # 使用 MediaWiki API 获取分类成员
+            import requests
+            api_url = f"https://{self.language}.wikipedia.org/w/api.php"
+
+            pages = []
+            subcategories = []
+
+            params = {
+                'action': 'query',
+                'list': 'categorymembers',
+                'cmtitle': f'Category:{category_name}',
+                'cmlimit': min(max_pages, 500),
+                'format': 'json'
+            }
+
+            response = requests.get(api_url, params=params, timeout=15)
+            data = response.json()
+
+            if 'query' in data and 'categorymembers' in data['query']:
+                for member in data['query']['categorymembers']:
+                    if member['ns'] == 0:  # 普通页面
+                        pages.append({
+                            'title': member['title'],
+                            'pageid': member['pageid']
+                        })
+                    elif member['ns'] == 14 and depth > 0:  # 子分类
+                        subcategories.append(member['title'].replace('Category:', ''))
+
+            # 递归获取子分类
+            if depth > 0 and subcategories:
+                remaining = max_pages - len(pages)
+                for subcat in subcategories[:5]:  # 限制子分类数量
+                    if remaining <= 0:
+                        break
+                    sub_pages = self.get_category_members(subcat, depth - 1, remaining)
+                    pages.extend(sub_pages)
+                    remaining -= len(sub_pages)
+
+            logger.info(f"分类 '{category_name}' 找到 {len(pages)} 个页面")
+            return pages[:max_pages]
+
+        except Exception as e:
+            logger.error(f"获取分类成员出错: {category_name}, 错误: {str(e)}")
+            return []
+
+    def batch_get_pages(self, titles, callback=None):
+        """
+        批量获取多个页面
+
+        参数:
+            titles: 页面标题列表
+            callback: 进度回调函数 (current, total, title)
+
+        返回:
+            页面内容列表
+        """
+        results = []
+        total = len(titles)
+
+        for i, title in enumerate(titles):
+            if callback:
+                callback(i + 1, total, title)
+
+            page_data = self.get_page(title)
+            if page_data:
+                results.append(page_data)
+
+            # 添加延迟，避免请求过快
+            time.sleep(0.5)
+
+        logger.info(f"批量获取完成，成功 {len(results)}/{total} 个页面")
+        return results
+
+    def get_random_pages(self, count=5):
+        """
+        获取随机页面
+
+        参数:
+            count: 页面数量
+
+        返回:
+            随机页面列表
+        """
+        try:
+            import requests
+            api_url = f"https://{self.language}.wikipedia.org/w/api.php"
+
+            params = {
+                'action': 'query',
+                'list': 'random',
+                'rnnamespace': 0,
+                'rnlimit': count,
+                'format': 'json'
+            }
+
+            response = requests.get(api_url, params=params, timeout=10)
+            data = response.json()
+
+            pages = []
+            if 'query' in data and 'random' in data['query']:
+                for item in data['query']['random']:
+                    pages.append({
+                        'title': item['title'],
+                        'pageid': item['id']
+                    })
+
+            logger.info(f"获取 {len(pages)} 个随机页面")
+            return pages
+
+        except Exception as e:
+            logger.error(f"获取随机页面出错: {str(e)}")
+            return []
 
 
 class DataProcessor:

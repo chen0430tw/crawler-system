@@ -19,10 +19,11 @@ from werkzeug.utils import secure_filename
 
 # 导入爬虫模块
 from crawler import (
-    WebCrawler, 
-    DataProcessor, 
-    StorageManager, 
-    UrbanLegendAnalyzer, 
+    WebCrawler,
+    DataProcessor,
+    StorageManager,
+    UrbanLegendAnalyzer,
+    WikipediaAPICrawler,
     calculate_statistics,
     NumpyEncoder
 )
@@ -522,12 +523,181 @@ def health_check():
         'active_tasks': sum(1 for task in tasks.values() if task['status'] == TASK_STATUS['RUNNING'])
     })
 
+
+# ==================== Wikipedia API 路由 ====================
+
+# 全局 Wikipedia 爬虫实例缓存
+wiki_crawlers = {}
+
+def get_wiki_crawler(language='zh'):
+    """获取或创建指定语言的 Wikipedia 爬虫实例"""
+    if language not in wiki_crawlers:
+        wiki_crawlers[language] = WikipediaAPICrawler(language=language)
+    return wiki_crawlers[language]
+
+
+@app.route('/api/wiki/search', methods=['GET'])
+def wiki_search():
+    """
+    搜索维基百科
+    参数:
+        q: 搜索关键词
+        lang: 语言 (默认 zh)
+        limit: 结果数量 (默认 10)
+    """
+    query = request.args.get('q', '')
+    language = request.args.get('lang', 'zh')
+    limit = int(request.args.get('limit', 10))
+
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        results = crawler.search(query, limit=limit)
+        return jsonify({
+            'query': query,
+            'language': language,
+            'results': results,
+            'count': len(results)
+        })
+    except Exception as e:
+        logger.error(f"Wikipedia 搜索出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/page', methods=['GET'])
+def wiki_get_page():
+    """
+    获取维基百科页面详情
+    参数:
+        title: 页面标题
+        lang: 语言 (默认 zh)
+    """
+    title = request.args.get('title', '')
+    language = request.args.get('lang', 'zh')
+
+    if not title:
+        return jsonify({'error': '请提供页面标题'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        page_data = crawler.get_page(title)
+
+        if not page_data:
+            return jsonify({'error': f'页面不存在: {title}'}), 404
+
+        return jsonify(page_data)
+    except Exception as e:
+        logger.error(f"获取 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/category', methods=['GET'])
+def wiki_get_category():
+    """
+    获取维基百科分类下的页面
+    参数:
+        name: 分类名称 (不含 Category: 前缀)
+        lang: 语言 (默认 zh)
+        depth: 递归深度 (默认 0)
+        limit: 最大页面数 (默认 50)
+    """
+    category_name = request.args.get('name', '')
+    language = request.args.get('lang', 'zh')
+    depth = int(request.args.get('depth', 0))
+    limit = int(request.args.get('limit', 50))
+
+    if not category_name:
+        return jsonify({'error': '请提供分类名称'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        pages = crawler.get_category_members(category_name, depth=depth, max_pages=limit)
+        return jsonify({
+            'category': category_name,
+            'language': language,
+            'depth': depth,
+            'pages': pages,
+            'count': len(pages)
+        })
+    except Exception as e:
+        logger.error(f"获取 Wikipedia 分类出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/random', methods=['GET'])
+def wiki_random_pages():
+    """
+    获取随机维基百科页面
+    参数:
+        lang: 语言 (默认 zh)
+        count: 数量 (默认 5)
+    """
+    language = request.args.get('lang', 'zh')
+    count = int(request.args.get('count', 5))
+
+    try:
+        crawler = get_wiki_crawler(language)
+        pages = crawler.get_random_pages(count=count)
+        return jsonify({
+            'language': language,
+            'pages': pages,
+            'count': len(pages)
+        })
+    except Exception as e:
+        logger.error(f"获取随机 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/batch', methods=['POST'])
+def wiki_batch_pages():
+    """
+    批量获取维基百科页面
+    请求体:
+        titles: 页面标题列表
+        lang: 语言 (默认 zh)
+    """
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    titles = request.json.get('titles', [])
+    language = request.json.get('lang', 'zh')
+
+    if not titles:
+        return jsonify({'error': '请提供页面标题列表'}), 400
+
+    if len(titles) > 20:
+        return jsonify({'error': '一次最多获取 20 个页面'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        pages = crawler.batch_get_pages(titles)
+        return jsonify({
+            'language': language,
+            'requested': len(titles),
+            'success': len(pages),
+            'pages': pages
+        })
+    except Exception as e:
+        logger.error(f"批量获取 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/languages', methods=['GET'])
+def wiki_languages():
+    """获取支持的维基百科语言列表"""
+    return jsonify({
+        'languages': WikipediaAPICrawler.SUPPORTED_LANGUAGES
+    })
+
+
 @app.route('/', methods=['GET'])
 def index():
     """默认路由"""
     return jsonify({
         'message': '全息拉普拉斯互联网爬虫系统API服务',
-        'version': '1.0.0',
+        'version': '1.1.0',
         'endpoints': [
             '/api/submit - 提交爬虫任务',
             '/api/status/<task_id> - 获取任务状态',
@@ -536,6 +706,12 @@ def index():
             '/api/tasks - 列出所有任务',
             '/api/cancel/<task_id> - 取消任务',
             '/api/upload - 上传配置文件',
+            '/api/wiki/search - 搜索维基百科',
+            '/api/wiki/page - 获取维基百科页面',
+            '/api/wiki/category - 获取分类页面',
+            '/api/wiki/random - 获取随机页面',
+            '/api/wiki/batch - 批量获取页面',
+            '/api/wiki/languages - 获取支持的语言',
             '/health - 健康检查'
         ]
     })
