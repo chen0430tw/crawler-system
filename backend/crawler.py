@@ -791,24 +791,29 @@ class WikipediaAPICrawler:
         'ru': 'Русский'
     }
 
-    def __init__(self, language='zh', user_agent='HolographicLaplacianCrawler/1.0'):
+    def __init__(self, language='zh', user_agent='HolographicLaplacianCrawler/1.0', base_url=None):
         """
         初始化 Wikipedia API 爬虫
 
         参数:
             language: 维基百科语言版本 (默认中文)
             user_agent: 用户代理标识
+            base_url: 自定义 API 基础 URL (用于测试模式)
         """
         self.language = language
         self.user_agent = user_agent
+        self.base_url = base_url  # 如果设置了 base_url，使用它替代默认 Wikipedia API
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': user_agent
         })
-        logger.info(f"WikipediaAPICrawler 初始化完成，语言: {language}")
+        mode = "测试模式" if base_url else "正常模式"
+        logger.info(f"WikipediaAPICrawler 初始化完成，语言: {language}, 模式: {mode}")
 
     def _get_api_url(self):
         """获取当前语言的 API URL"""
+        if self.base_url:
+            return self.base_url
         return f"https://{self.language}.wikipedia.org/w/api.php"
 
     def set_language(self, language):
@@ -1054,9 +1059,6 @@ class WikipediaAPICrawler:
             随机页面列表
         """
         try:
-            import requests
-            api_url = f"https://{self.language}.wikipedia.org/w/api.php"
-
             params = {
                 'action': 'query',
                 'list': 'random',
@@ -1065,7 +1067,7 @@ class WikipediaAPICrawler:
                 'format': 'json'
             }
 
-            response = requests.get(api_url, params=params, timeout=10)
+            response = self.session.get(self._get_api_url(), params=params, timeout=10)
             data = response.json()
 
             pages = []
@@ -1090,12 +1092,13 @@ class ZhihuZhuanlanCrawler:
     通过知乎专栏 API 获取专栏和文章信息
     """
 
-    def __init__(self, delay=1.0):
+    def __init__(self, delay=1.0, base_url=None):
         """
         初始化知乎专栏爬虫
 
         参数:
             delay: 请求间隔时间（秒），避免被封
+            base_url: 自定义 API 基础 URL (用于测试模式)
         """
         self.delay = delay
         self.session = requests.Session()
@@ -1106,8 +1109,9 @@ class ZhihuZhuanlanCrawler:
             'Referer': 'https://zhuanlan.zhihu.com/',
             'Origin': 'https://zhuanlan.zhihu.com'
         })
-        self.base_url = 'https://zhuanlan.zhihu.com/api'
-        logger.info("ZhihuZhuanlanCrawler 初始化完成")
+        self.base_url = base_url if base_url else 'https://zhuanlan.zhihu.com/api'
+        mode = "测试模式" if base_url else "正常模式"
+        logger.info(f"ZhihuZhuanlanCrawler 初始化完成, 模式: {mode}")
 
     def _request(self, url, params=None):
         """发送请求并处理响应"""

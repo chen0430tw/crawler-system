@@ -529,12 +529,22 @@ def health_check():
 
 # 全局 Wikipedia 爬虫实例缓存
 wiki_crawlers = {}
+wiki_crawlers_test = {}  # 测试模式爬虫缓存
 
-def get_wiki_crawler(language='zh'):
+def get_wiki_crawler(language='zh', test_mode=False):
     """获取或创建指定语言的 Wikipedia 爬虫实例"""
-    if language not in wiki_crawlers:
-        wiki_crawlers[language] = WikipediaAPICrawler(language=language)
-    return wiki_crawlers[language]
+    if test_mode:
+        if language not in wiki_crawlers_test:
+            # 使用本地模拟 API
+            wiki_crawlers_test[language] = WikipediaAPICrawler(
+                language=language,
+                base_url='http://localhost:5000/mock/wiki/api.php'
+            )
+        return wiki_crawlers_test[language]
+    else:
+        if language not in wiki_crawlers:
+            wiki_crawlers[language] = WikipediaAPICrawler(language=language)
+        return wiki_crawlers[language]
 
 
 @app.route('/api/wiki/search', methods=['GET'])
@@ -697,13 +707,23 @@ def wiki_languages():
 
 # 全局知乎专栏爬虫实例
 zhihu_crawler = None
+zhihu_crawler_test = None  # 测试模式爬虫
 
-def get_zhihu_crawler():
+def get_zhihu_crawler(test_mode=False):
     """获取或创建知乎专栏爬虫实例"""
-    global zhihu_crawler
-    if zhihu_crawler is None:
-        zhihu_crawler = ZhihuZhuanlanCrawler(delay=1.0)
-    return zhihu_crawler
+    global zhihu_crawler, zhihu_crawler_test
+    if test_mode:
+        if zhihu_crawler_test is None:
+            # 使用本地模拟 API
+            zhihu_crawler_test = ZhihuZhuanlanCrawler(
+                delay=0.1,  # 测试模式减少延迟
+                base_url='http://localhost:5000/mock/zhihu/api'
+            )
+        return zhihu_crawler_test
+    else:
+        if zhihu_crawler is None:
+            zhihu_crawler = ZhihuZhuanlanCrawler(delay=1.0)
+        return zhihu_crawler
 
 
 @app.route('/api/zhihu/column', methods=['GET'])
@@ -879,6 +899,86 @@ def zhihu_batch_posts():
         return jsonify({'error': str(e)}), 500
 
 
+# ==================== 测试模式 API 路由 ====================
+
+@app.route('/api/test/wiki/search', methods=['GET'])
+def test_wiki_search():
+    """使用模拟数据测试 Wikipedia 搜索"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language='zh', test_mode=True)
+        results = crawler.search(query, limit=10)
+        return jsonify({
+            'mode': 'test',
+            'query': query,
+            'results': results,
+            'count': len(results)
+        })
+    except Exception as e:
+        logger.error(f"测试 Wikipedia 搜索出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/wiki/page', methods=['GET'])
+def test_wiki_page():
+    """使用模拟数据测试获取 Wikipedia 页面"""
+    title = request.args.get('title', '')
+    if not title:
+        return jsonify({'error': '请提供页面标题'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language='zh', test_mode=True)
+        page_data = crawler.get_page(title)
+        if not page_data:
+            return jsonify({'error': f'页面不存在: {title}'}), 404
+        page_data['mode'] = 'test'
+        return jsonify(page_data)
+    except Exception as e:
+        logger.error(f"测试获取 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/zhihu/column', methods=['GET'])
+def test_zhihu_column():
+    """使用模拟数据测试获取知乎专栏"""
+    slug = request.args.get('slug', '')
+    if not slug:
+        return jsonify({'error': '请提供专栏标识'}), 400
+
+    try:
+        crawler = get_zhihu_crawler(test_mode=True)
+        column_info = crawler.get_column_info(slug)
+        if not column_info:
+            return jsonify({'error': f'专栏不存在: {slug}'}), 404
+        column_info['mode'] = 'test'
+        return jsonify(column_info)
+    except Exception as e:
+        logger.error(f"测试获取知乎专栏出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/zhihu/post', methods=['GET'])
+def test_zhihu_post():
+    """使用模拟数据测试获取知乎文章"""
+    post_id = request.args.get('id', '')
+    if not post_id:
+        return jsonify({'error': '请提供文章 ID'}), 400
+
+    try:
+        crawler = get_zhihu_crawler(test_mode=True)
+        post_data = crawler.get_post(post_id)
+        if not post_data:
+            return jsonify({'error': f'文章不存在: {post_id}'}), 404
+        post_data['mode'] = 'test'
+        return jsonify(post_data)
+    except Exception as e:
+        logger.error(f"测试获取知乎文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/', methods=['GET'])
 def index():
     """默认路由"""
@@ -908,6 +1008,275 @@ def index():
             '/health - 健康检查'
         ]
     })
+
+
+# ==================== 模拟测试 API (Mock API for Testing) ====================
+
+# 模拟 Wikipedia 数据
+MOCK_WIKI_DATA = {
+    'pages': {
+        'Python': {
+            'pageid': 23862,
+            'title': 'Python',
+            'extract': 'Python是一种广泛使用的解释型、高级和通用的编程语言。Python的设计哲学强调代码的可读性和简洁的语法。Python支持多种编程范型，包括结构化、过程化、反射式、面向对象和函数式编程。',
+            'url': 'https://zh.wikipedia.org/wiki/Python',
+            'categories': ['编程语言', '脚本语言', '面向对象的编程语言'],
+            'links': ['编程语言', '解释型语言', '面向对象编程'],
+            'sections': [
+                {'title': '历史', 'level': 1, 'text': 'Python由吉多·范罗苏姆创造，第一版发布于1991年。'},
+                {'title': '特性', 'level': 1, 'text': 'Python是一种多范型编程语言，支持面向对象、命令式、函数式编程。'},
+                {'title': '语法', 'level': 1, 'text': 'Python使用缩进来表示代码块，而不是使用大括号。'}
+            ]
+        },
+        '人工智能': {
+            'pageid': 12345,
+            'title': '人工智能',
+            'extract': '人工智能（英语：Artificial Intelligence，缩写为AI）亦称人工智慧、机器智能，指由人制造出来的机器所表现出来的智能。',
+            'url': 'https://zh.wikipedia.org/wiki/人工智能',
+            'categories': ['人工智能', '计算机科学'],
+            'links': ['机器学习', '深度学习', '神经网络'],
+            'sections': [
+                {'title': '定义', 'level': 1, 'text': '人工智能的定义可以分为两部分。'},
+                {'title': '历史', 'level': 1, 'text': '人工智能的研究始于20世纪50年代。'}
+            ]
+        },
+        '机器学习': {
+            'pageid': 67890,
+            'title': '机器学习',
+            'extract': '机器学习是人工智能的一个分支，是一门多领域交叉学科，涉及概率论、统计学、算法复杂度理论等多门学科。',
+            'url': 'https://zh.wikipedia.org/wiki/机器学习',
+            'categories': ['机器学习', '人工智能', '统计学'],
+            'links': ['深度学习', '神经网络', '监督学习'],
+            'sections': []
+        }
+    },
+    'categories': {
+        '编程语言': [
+            {'title': 'Python', 'pageid': 23862},
+            {'title': 'Java', 'pageid': 11111},
+            {'title': 'JavaScript', 'pageid': 22222}
+        ],
+        '人工智能': [
+            {'title': '机器学习', 'pageid': 67890},
+            {'title': '深度学习', 'pageid': 33333},
+            {'title': '自然语言处理', 'pageid': 44444}
+        ]
+    }
+}
+
+# 模拟知乎专栏数据
+MOCK_ZHIHU_DATA = {
+    'columns': {
+        'test-column': {
+            'slug': 'test-column',
+            'title': '测试专栏',
+            'description': '这是一个用于测试的知乎专栏',
+            'intro': '专栏简介内容',
+            'articlesCount': 3,
+            'followersCount': 1234,
+            'creator': {
+                'name': '测试作者',
+                'urlToken': 'test-author',
+                'avatar': {'url': 'https://example.com/avatar.jpg'}
+            },
+            'imageUrl': 'https://example.com/column.jpg'
+        },
+        'tech-column': {
+            'slug': 'tech-column',
+            'title': '技术分享',
+            'description': '分享技术文章和编程经验',
+            'intro': '专注于技术领域的专栏',
+            'articlesCount': 5,
+            'followersCount': 5678,
+            'creator': {
+                'name': '技术达人',
+                'urlToken': 'tech-master',
+                'avatar': {'url': 'https://example.com/tech-avatar.jpg'}
+            },
+            'imageUrl': 'https://example.com/tech-column.jpg'
+        }
+    },
+    'posts': {
+        'test-column': [
+            {
+                'id': '100001',
+                'title': '第一篇测试文章',
+                'excerpt': '这是文章摘要内容...',
+                'url': 'https://zhuanlan.zhihu.com/p/100001',
+                'created': '2025-01-15T10:00:00',
+                'updated': '2025-01-15T12:00:00',
+                'voteupCount': 100,
+                'commentCount': 20,
+                'author': {'name': '测试作者'}
+            },
+            {
+                'id': '100002',
+                'title': '第二篇测试文章',
+                'excerpt': '另一篇文章的摘要...',
+                'url': 'https://zhuanlan.zhihu.com/p/100002',
+                'created': '2025-01-16T10:00:00',
+                'updated': '2025-01-16T12:00:00',
+                'voteupCount': 150,
+                'commentCount': 30,
+                'author': {'name': '测试作者'}
+            },
+            {
+                'id': '100003',
+                'title': '第三篇测试文章',
+                'excerpt': '第三篇文章摘要内容...',
+                'url': 'https://zhuanlan.zhihu.com/p/100003',
+                'created': '2025-01-17T10:00:00',
+                'updated': '2025-01-17T12:00:00',
+                'voteupCount': 200,
+                'commentCount': 40,
+                'author': {'name': '测试作者'}
+            }
+        ],
+        'tech-column': [
+            {
+                'id': '200001',
+                'title': 'Python 入门教程',
+                'excerpt': 'Python 是一门简单易学的编程语言...',
+                'url': 'https://zhuanlan.zhihu.com/p/200001',
+                'created': '2025-01-10T10:00:00',
+                'updated': '2025-01-10T12:00:00',
+                'voteupCount': 500,
+                'commentCount': 100,
+                'author': {'name': '技术达人'}
+            }
+        ]
+    },
+    'articles': {
+        '100001': {
+            'id': '100001',
+            'title': '第一篇测试文章',
+            'content': '<p>这是第一篇测试文章的完整内容。</p><p>包含多个段落和丰富的文字描述。</p><h2>第一章</h2><p>章节内容...</p>',
+            'excerpt': '这是文章摘要内容...',
+            'url': 'https://zhuanlan.zhihu.com/p/100001',
+            'created': '2025-01-15T10:00:00',
+            'updated': '2025-01-15T12:00:00',
+            'voteupCount': 100,
+            'commentCount': 20,
+            'author': {'name': '测试作者', 'urlToken': 'test-author', 'bio': '专栏作者'},
+            'column': {'slug': 'test-column', 'title': '测试专栏'},
+            'topics': [{'name': '测试'}, {'name': '技术'}]
+        },
+        '200001': {
+            'id': '200001',
+            'title': 'Python 入门教程',
+            'content': '<p>Python 是一门简单易学的编程语言。</p><h2>安装 Python</h2><p>首先需要下载并安装 Python...</p><h2>Hello World</h2><p>print("Hello, World!")</p>',
+            'excerpt': 'Python 是一门简单易学的编程语言...',
+            'url': 'https://zhuanlan.zhihu.com/p/200001',
+            'created': '2025-01-10T10:00:00',
+            'updated': '2025-01-10T12:00:00',
+            'voteupCount': 500,
+            'commentCount': 100,
+            'author': {'name': '技术达人', 'urlToken': 'tech-master', 'bio': '技术分享者'},
+            'column': {'slug': 'tech-column', 'title': '技术分享'},
+            'topics': [{'name': 'Python'}, {'name': '编程'}]
+        }
+    }
+}
+
+
+@app.route('/mock/wiki/api.php', methods=['GET'])
+def mock_wiki_api():
+    """模拟 Wikipedia MediaWiki API"""
+    action = request.args.get('action', '')
+    format_type = request.args.get('format', 'json')
+
+    if action == 'query':
+        list_type = request.args.get('list', '')
+        prop = request.args.get('prop', '')
+
+        # 搜索 API
+        if list_type == 'search':
+            query = request.args.get('srsearch', '')
+            limit = int(request.args.get('srlimit', 10))
+            results = []
+            for title, page in MOCK_WIKI_DATA['pages'].items():
+                if query.lower() in title.lower() or query.lower() in page['extract'].lower():
+                    results.append({
+                        'title': title,
+                        'pageid': page['pageid'],
+                        'snippet': page['extract'][:100]
+                    })
+            return jsonify({'query': {'search': results[:limit]}})
+
+        # 随机页面 API
+        if list_type == 'random':
+            count = int(request.args.get('rnlimit', 5))
+            import random
+            pages = list(MOCK_WIKI_DATA['pages'].values())
+            random.shuffle(pages)
+            results = [{'title': p['title'], 'id': p['pageid']} for p in pages[:count]]
+            return jsonify({'query': {'random': results}})
+
+        # 分类成员 API
+        if list_type == 'categorymembers':
+            cat_title = request.args.get('cmtitle', '').replace('Category:', '')
+            members = MOCK_WIKI_DATA['categories'].get(cat_title, [])
+            results = [{'title': m['title'], 'pageid': m['pageid'], 'ns': 0} for m in members]
+            return jsonify({'query': {'categorymembers': results}})
+
+        # 页面内容 API
+        titles = request.args.get('titles', '')
+        if titles and titles in MOCK_WIKI_DATA['pages']:
+            page = MOCK_WIKI_DATA['pages'][titles]
+            page_data = {
+                str(page['pageid']): {
+                    'pageid': page['pageid'],
+                    'title': page['title'],
+                    'extract': page['extract'],
+                    'fullurl': page['url'],
+                    'categories': [{'title': f"Category:{c}"} for c in page['categories']],
+                    'links': [{'title': l} for l in page['links']]
+                }
+            }
+            return jsonify({'query': {'pages': page_data}})
+
+    if action == 'parse':
+        page_title = request.args.get('page', '')
+        if page_title in MOCK_WIKI_DATA['pages']:
+            page = MOCK_WIKI_DATA['pages'][page_title]
+            return jsonify({
+                'parse': {
+                    'title': page['title'],
+                    'sections': [{'line': s['title'], 'level': str(s['level'] + 1), 'index': str(i)}
+                                for i, s in enumerate(page['sections'])]
+                }
+            })
+
+    return jsonify({'error': 'Unknown action'}), 400
+
+
+@app.route('/mock/zhihu/api/columns/<slug>', methods=['GET'])
+def mock_zhihu_column(slug):
+    """模拟知乎专栏信息 API"""
+    if slug in MOCK_ZHIHU_DATA['columns']:
+        return jsonify(MOCK_ZHIHU_DATA['columns'][slug])
+    return jsonify({'error': 'Column not found'}), 404
+
+
+@app.route('/mock/zhihu/api/columns/<slug>/articles', methods=['GET'])
+def mock_zhihu_column_posts(slug):
+    """模拟知乎专栏文章列表 API"""
+    limit = int(request.args.get('limit', 20))
+    offset = int(request.args.get('offset', 0))
+
+    if slug in MOCK_ZHIHU_DATA['posts']:
+        posts = MOCK_ZHIHU_DATA['posts'][slug]
+        return jsonify({'data': posts[offset:offset + limit]})
+    return jsonify({'data': []})
+
+
+@app.route('/mock/zhihu/api/posts/<post_id>', methods=['GET'])
+def mock_zhihu_post(post_id):
+    """模拟知乎文章详情 API"""
+    if post_id in MOCK_ZHIHU_DATA['articles']:
+        return jsonify(MOCK_ZHIHU_DATA['articles'][post_id])
+    return jsonify({'error': 'Post not found'}), 404
+
 
 if __name__ == '__main__':
     # 获取端口，默认为5000
