@@ -3752,18 +3752,18 @@ function downloadWikiPage(url, page) {
     
     // 创建并下载Blob
     const blob = new Blob([fullHtml], {type: 'text/html'});
-    const url = URL.createObjectURL(blob);
-    
+    const blobUrl = URL.createObjectURL(blob);
+
     const a = document.createElement('a');
-    a.href = url;
+    a.href = blobUrl;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    
+
     // 清理
     setTimeout(() => {
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(blobUrl);
     }, 100);
 }
 
