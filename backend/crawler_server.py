@@ -24,6 +24,7 @@ from crawler import (
     StorageManager,
     UrbanLegendAnalyzer,
     WikipediaAPICrawler,
+    ZhihuZhuanlanCrawler,
     calculate_statistics,
     NumpyEncoder
 )
@@ -692,12 +693,198 @@ def wiki_languages():
     })
 
 
+# ==================== 知乎专栏 API 路由 ====================
+
+# 全局知乎专栏爬虫实例
+zhihu_crawler = None
+
+def get_zhihu_crawler():
+    """获取或创建知乎专栏爬虫实例"""
+    global zhihu_crawler
+    if zhihu_crawler is None:
+        zhihu_crawler = ZhihuZhuanlanCrawler(delay=1.0)
+    return zhihu_crawler
+
+
+@app.route('/api/zhihu/column', methods=['GET'])
+def zhihu_get_column():
+    """
+    获取知乎专栏信息
+    参数:
+        slug: 专栏标识 (如 URL zhuanlan.zhihu.com/passer 中的 passer)
+    """
+    slug = request.args.get('slug', '')
+
+    if not slug:
+        return jsonify({'error': '请提供专栏标识 (slug)'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        column_info = crawler.get_column_info(slug)
+
+        if not column_info:
+            return jsonify({'error': f'专栏不存在或无法访问: {slug}'}), 404
+
+        return jsonify(column_info)
+    except Exception as e:
+        logger.error(f"获取知乎专栏出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/column/posts', methods=['GET'])
+def zhihu_get_column_posts():
+    """
+    获取知乎专栏文章列表
+    参数:
+        slug: 专栏标识
+        limit: 每页数量 (默认 20，最大 20)
+        offset: 偏移量 (默认 0)
+    """
+    slug = request.args.get('slug', '')
+    limit = int(request.args.get('limit', 20))
+    offset = int(request.args.get('offset', 0))
+
+    if not slug:
+        return jsonify({'error': '请提供专栏标识 (slug)'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        posts = crawler.get_column_posts(slug, limit=limit, offset=offset)
+
+        return jsonify({
+            'slug': slug,
+            'offset': offset,
+            'limit': limit,
+            'posts': posts,
+            'count': len(posts)
+        })
+    except Exception as e:
+        logger.error(f"获取知乎专栏文章列表出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/column/all', methods=['GET'])
+def zhihu_get_all_column_posts():
+    """
+    获取知乎专栏所有文章
+    参数:
+        slug: 专栏标识
+        max: 最大文章数 (默认 100)
+    """
+    slug = request.args.get('slug', '')
+    max_posts = int(request.args.get('max', 100))
+
+    if not slug:
+        return jsonify({'error': '请提供专栏标识 (slug)'}), 400
+
+    if max_posts > 500:
+        return jsonify({'error': '最大文章数不能超过 500'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        posts = crawler.get_all_column_posts(slug, max_posts=max_posts)
+
+        return jsonify({
+            'slug': slug,
+            'posts': posts,
+            'count': len(posts)
+        })
+    except Exception as e:
+        logger.error(f"获取知乎专栏所有文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/post', methods=['GET'])
+def zhihu_get_post():
+    """
+    获取知乎文章详情
+    参数:
+        id: 文章 ID
+    """
+    post_id = request.args.get('id', '')
+
+    if not post_id:
+        return jsonify({'error': '请提供文章 ID'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        post_data = crawler.get_post(post_id)
+
+        if not post_data:
+            return jsonify({'error': f'文章不存在: {post_id}'}), 404
+
+        return jsonify(post_data)
+    except Exception as e:
+        logger.error(f"获取知乎文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/search', methods=['GET'])
+def zhihu_search_columns():
+    """
+    搜索知乎专栏
+    参数:
+        q: 搜索关键词
+        limit: 结果数量 (默认 10)
+    """
+    query = request.args.get('q', '')
+    limit = int(request.args.get('limit', 10))
+
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        results = crawler.search_columns(query, limit=limit)
+
+        return jsonify({
+            'query': query,
+            'results': results,
+            'count': len(results)
+        })
+    except Exception as e:
+        logger.error(f"搜索知乎专栏出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/batch', methods=['POST'])
+def zhihu_batch_posts():
+    """
+    批量获取知乎文章
+    请求体:
+        ids: 文章 ID 列表
+    """
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    post_ids = request.json.get('ids', [])
+
+    if not post_ids:
+        return jsonify({'error': '请提供文章 ID 列表'}), 400
+
+    if len(post_ids) > 20:
+        return jsonify({'error': '一次最多获取 20 篇文章'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        posts = crawler.batch_get_posts(post_ids)
+
+        return jsonify({
+            'requested': len(post_ids),
+            'success': len(posts),
+            'posts': posts
+        })
+    except Exception as e:
+        logger.error(f"批量获取知乎文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/', methods=['GET'])
 def index():
     """默认路由"""
     return jsonify({
         'message': '全息拉普拉斯互联网爬虫系统API服务',
-        'version': '1.1.0',
+        'version': '1.2.0',
         'endpoints': [
             '/api/submit - 提交爬虫任务',
             '/api/status/<task_id> - 获取任务状态',
@@ -712,6 +899,12 @@ def index():
             '/api/wiki/random - 获取随机页面',
             '/api/wiki/batch - 批量获取页面',
             '/api/wiki/languages - 获取支持的语言',
+            '/api/zhihu/column - 获取知乎专栏信息',
+            '/api/zhihu/column/posts - 获取专栏文章列表',
+            '/api/zhihu/column/all - 获取专栏所有文章',
+            '/api/zhihu/post - 获取文章详情',
+            '/api/zhihu/search - 搜索知乎专栏',
+            '/api/zhihu/batch - 批量获取文章',
             '/health - 健康检查'
         ]
     })

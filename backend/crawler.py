@@ -33,10 +33,9 @@ try:
     from nltk.stem import WordNetLemmatizer
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.cluster import KMeans
-    import wikipediaapi
 except ImportError:
     print("缺少必要的库。请运行以下命令安装依赖:")
-    print("pip install requests beautifulsoup4 nltk scikit-learn Wikipedia-API")
+    print("pip install requests beautifulsoup4 nltk scikit-learn")
     sys.exit(1)
 
 # 创建自定义JSON编码器，处理NumPy类型
@@ -776,8 +775,8 @@ def extract_embedded_media(html_content, base_url=None):
 
 class WikipediaAPICrawler:
     """
-    基于官方 Wikipedia API 的爬虫类
-    使用 Wikipedia-API 库，比直接爬取网页更稳定可靠
+    基于官方 MediaWiki API 的爬虫类
+    直接使用 requests 调用 API，无需额外依赖
     """
 
     # 支持的语言列表
@@ -802,20 +801,20 @@ class WikipediaAPICrawler:
         """
         self.language = language
         self.user_agent = user_agent
-        self.wiki = wikipediaapi.Wikipedia(
-            user_agent=user_agent,
-            language=language
-        )
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': user_agent
+        })
         logger.info(f"WikipediaAPICrawler 初始化完成，语言: {language}")
+
+    def _get_api_url(self):
+        """获取当前语言的 API URL"""
+        return f"https://{self.language}.wikipedia.org/w/api.php"
 
     def set_language(self, language):
         """切换语言版本"""
         if language in self.SUPPORTED_LANGUAGES:
             self.language = language
-            self.wiki = wikipediaapi.Wikipedia(
-                user_agent=self.user_agent,
-                language=language
-            )
             logger.info(f"已切换到 {self.SUPPORTED_LANGUAGES[language]} 维基百科")
             return True
         else:
@@ -834,9 +833,6 @@ class WikipediaAPICrawler:
             搜索结果列表
         """
         try:
-            # Wikipedia-API 不直接支持搜索，使用 MediaWiki API
-            import requests
-            search_url = f"https://{self.language}.wikipedia.org/w/api.php"
             params = {
                 'action': 'query',
                 'list': 'search',
@@ -844,7 +840,7 @@ class WikipediaAPICrawler:
                 'srlimit': limit,
                 'format': 'json'
             }
-            response = requests.get(search_url, params=params, timeout=10)
+            response = self.session.get(self._get_api_url(), params=params, timeout=10)
             data = response.json()
 
             results = []
@@ -874,47 +870,92 @@ class WikipediaAPICrawler:
             页面信息字典，包含标题、摘要、全文、链接、分类等
         """
         try:
-            page = self.wiki.page(title)
+            # 获取页面内容和元信息
+            params = {
+                'action': 'query',
+                'titles': title,
+                'prop': 'extracts|info|categories|links',
+                'exintro': False,
+                'explaintext': True,
+                'inprop': 'url',
+                'cllimit': 50,
+                'pllimit': 100,
+                'format': 'json'
+            }
+            response = self.session.get(self._get_api_url(), params=params, timeout=15)
+            data = response.json()
 
-            if not page.exists():
+            pages = data.get('query', {}).get('pages', {})
+            if not pages:
+                return None
+
+            page_data = list(pages.values())[0]
+
+            # 检查页面是否存在
+            if 'missing' in page_data:
                 logger.warning(f"页面不存在: {title}")
                 return None
 
+            # 获取摘要（简介）
+            summary_params = {
+                'action': 'query',
+                'titles': title,
+                'prop': 'extracts',
+                'exintro': True,
+                'explaintext': True,
+                'format': 'json'
+            }
+            summary_response = self.session.get(self._get_api_url(), params=summary_params, timeout=10)
+            summary_data = summary_response.json()
+            summary_pages = summary_data.get('query', {}).get('pages', {})
+            summary = list(summary_pages.values())[0].get('extract', '') if summary_pages else ''
+
+            # 构造结果
             result = {
-                'title': page.title,
-                'url': page.fullurl,
-                'summary': page.summary,
-                'text': page.text,
-                'categories': list(page.categories.keys()),
-                'links': list(page.links.keys())[:100],  # 限制链接数量
-                'sections': self._get_sections(page),
+                'title': page_data.get('title', title),
+                'pageid': page_data.get('pageid'),
+                'url': page_data.get('fullurl', f"https://{self.language}.wikipedia.org/wiki/{title.replace(' ', '_')}"),
+                'summary': summary[:1000] if summary else '',
+                'text': page_data.get('extract', ''),
+                'categories': [cat['title'].replace('Category:', '') for cat in page_data.get('categories', [])],
+                'links': [link['title'] for link in page_data.get('links', [])][:100],
+                'sections': self._get_sections(title),
                 'language': self.language,
                 'timestamp': datetime.now().isoformat()
             }
 
-            logger.info(f"获取页面成功: {title}, 内容长度: {len(page.text)}")
+            logger.info(f"获取页面成功: {title}, 内容长度: {len(result['text'])}")
             return result
 
         except Exception as e:
             logger.error(f"获取页面出错: {title}, 错误: {str(e)}")
             return None
 
-    def _get_sections(self, page):
+    def _get_sections(self, title):
         """提取页面章节结构"""
-        sections = []
+        try:
+            params = {
+                'action': 'parse',
+                'page': title,
+                'prop': 'sections',
+                'format': 'json'
+            }
+            response = self.session.get(self._get_api_url(), params=params, timeout=10)
+            data = response.json()
 
-        def extract_sections(section_list, level=0):
-            for section in section_list:
+            sections = []
+            for section in data.get('parse', {}).get('sections', []):
                 sections.append({
-                    'title': section.title,
-                    'level': level,
-                    'text': section.text[:500] if section.text else ''  # 限制长度
+                    'title': section.get('line', ''),
+                    'level': int(section.get('level', 0)) - 1,
+                    'index': section.get('index', '')
                 })
-                if section.sections:
-                    extract_sections(section.sections, level + 1)
 
-        extract_sections(page.sections)
-        return sections
+            return sections
+
+        except Exception as e:
+            logger.error(f"获取章节结构出错: {str(e)}")
+            return []
 
     def get_category_members(self, category_name, depth=0, max_pages=50):
         """
@@ -1041,6 +1082,291 @@ class WikipediaAPICrawler:
         except Exception as e:
             logger.error(f"获取随机页面出错: {str(e)}")
             return []
+
+
+class ZhihuZhuanlanCrawler:
+    """
+    知乎专栏爬虫类
+    通过知乎专栏 API 获取专栏和文章信息
+    """
+
+    def __init__(self, delay=1.0):
+        """
+        初始化知乎专栏爬虫
+
+        参数:
+            delay: 请求间隔时间（秒），避免被封
+        """
+        self.delay = delay
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Referer': 'https://zhuanlan.zhihu.com/',
+            'Origin': 'https://zhuanlan.zhihu.com'
+        })
+        self.base_url = 'https://zhuanlan.zhihu.com/api'
+        logger.info("ZhihuZhuanlanCrawler 初始化完成")
+
+    def _request(self, url, params=None):
+        """发送请求并处理响应"""
+        try:
+            time.sleep(self.delay)  # 请求间隔
+            response = self.session.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"请求失败: {url}, 错误: {str(e)}")
+            return None
+
+    def get_column_info(self, column_slug):
+        """
+        获取专栏基本信息
+
+        参数:
+            column_slug: 专栏标识 (如 URL https://zhuanlan.zhihu.com/passer 中的 "passer")
+
+        返回:
+            专栏信息字典
+        """
+        url = f'{self.base_url}/columns/{column_slug}'
+        data = self._request(url)
+
+        if not data:
+            return None
+
+        result = {
+            'slug': column_slug,
+            'title': data.get('title', ''),
+            'description': data.get('description', ''),
+            'intro': data.get('intro', ''),
+            'articles_count': data.get('articlesCount', 0),
+            'followers_count': data.get('followersCount', 0),
+            'author': {
+                'name': data.get('creator', {}).get('name', ''),
+                'url_token': data.get('creator', {}).get('urlToken', ''),
+                'avatar': data.get('creator', {}).get('avatar', {}).get('url', '')
+            },
+            'url': f'https://zhuanlan.zhihu.com/{column_slug}',
+            'image_url': data.get('imageUrl', ''),
+            'timestamp': datetime.now().isoformat()
+        }
+
+        logger.info(f"获取专栏信息成功: {result['title']}")
+        return result
+
+    def get_column_posts(self, column_slug, limit=20, offset=0):
+        """
+        获取专栏文章列表
+
+        参数:
+            column_slug: 专栏标识
+            limit: 每页数量 (最大 20)
+            offset: 偏移量
+
+        返回:
+            文章列表
+        """
+        url = f'{self.base_url}/columns/{column_slug}/articles'
+        params = {
+            'limit': min(limit, 20),
+            'offset': offset
+        }
+
+        data = self._request(url, params)
+
+        if not data:
+            return []
+
+        posts = []
+        items = data.get('data', []) if isinstance(data, dict) else data
+
+        for item in items:
+            post = {
+                'id': item.get('id', ''),
+                'title': item.get('title', ''),
+                'excerpt': item.get('excerpt', ''),
+                'url': item.get('url', ''),
+                'created': item.get('created', ''),
+                'updated': item.get('updated', ''),
+                'voteup_count': item.get('voteupCount', 0),
+                'comment_count': item.get('commentCount', 0),
+                'author': item.get('author', {}).get('name', '')
+            }
+            posts.append(post)
+
+        logger.info(f"获取专栏 '{column_slug}' 文章列表，共 {len(posts)} 篇")
+        return posts
+
+    def get_all_column_posts(self, column_slug, max_posts=100):
+        """
+        获取专栏所有文章
+
+        参数:
+            column_slug: 专栏标识
+            max_posts: 最大文章数量
+
+        返回:
+            所有文章列表
+        """
+        all_posts = []
+        offset = 0
+        limit = 20
+
+        while len(all_posts) < max_posts:
+            posts = self.get_column_posts(column_slug, limit=limit, offset=offset)
+            if not posts:
+                break
+
+            all_posts.extend(posts)
+            offset += limit
+
+            if len(posts) < limit:
+                break
+
+        logger.info(f"获取专栏 '{column_slug}' 所有文章，共 {len(all_posts)} 篇")
+        return all_posts[:max_posts]
+
+    def get_post(self, post_id):
+        """
+        获取单篇文章详情
+
+        参数:
+            post_id: 文章 ID
+
+        返回:
+            文章详情字典
+        """
+        url = f'{self.base_url}/posts/{post_id}'
+        data = self._request(url)
+
+        if not data:
+            return None
+
+        # 清理 HTML 内容，提取纯文本
+        content_html = data.get('content', '')
+        content_text = self._html_to_text(content_html)
+
+        result = {
+            'id': data.get('id', ''),
+            'title': data.get('title', ''),
+            'content': content_text,
+            'content_html': content_html,
+            'excerpt': data.get('excerpt', ''),
+            'url': data.get('url', ''),
+            'created': data.get('created', ''),
+            'updated': data.get('updated', ''),
+            'voteup_count': data.get('voteupCount', 0),
+            'comment_count': data.get('commentCount', 0),
+            'author': {
+                'name': data.get('author', {}).get('name', ''),
+                'url_token': data.get('author', {}).get('urlToken', ''),
+                'bio': data.get('author', {}).get('bio', '')
+            },
+            'column': {
+                'slug': data.get('column', {}).get('slug', ''),
+                'title': data.get('column', {}).get('title', '')
+            },
+            'topics': [t.get('name', '') for t in data.get('topics', [])],
+            'timestamp': datetime.now().isoformat()
+        }
+
+        logger.info(f"获取文章成功: {result['title']}")
+        return result
+
+    def _html_to_text(self, html_content):
+        """将 HTML 转换为纯文本"""
+        if not html_content:
+            return ''
+
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # 移除脚本和样式
+            for tag in soup(['script', 'style', 'noscript']):
+                tag.decompose()
+
+            # 获取文本
+            text = soup.get_text(separator='\n', strip=True)
+
+            # 清理多余空行
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            return '\n'.join(lines)
+
+        except Exception as e:
+            logger.error(f"HTML 转文本出错: {str(e)}")
+            return html_content
+
+    def search_columns(self, keyword, limit=10):
+        """
+        搜索知乎专栏（通过知乎搜索 API）
+
+        参数:
+            keyword: 搜索关键词
+            limit: 结果数量限制
+
+        返回:
+            专栏搜索结果列表
+        """
+        try:
+            url = 'https://www.zhihu.com/api/v4/search_v3'
+            params = {
+                't': 'column',
+                'q': keyword,
+                'correction': 1,
+                'offset': 0,
+                'limit': limit
+            }
+
+            data = self._request(url, params)
+
+            if not data or 'data' not in data:
+                return []
+
+            results = []
+            for item in data.get('data', []):
+                obj = item.get('object', {})
+                if obj:
+                    results.append({
+                        'slug': obj.get('id', ''),
+                        'title': obj.get('title', ''),
+                        'description': obj.get('description', ''),
+                        'articles_count': obj.get('articles_count', 0),
+                        'followers_count': obj.get('followers', 0)
+                    })
+
+            logger.info(f"搜索专栏 '{keyword}'，找到 {len(results)} 个结果")
+            return results
+
+        except Exception as e:
+            logger.error(f"搜索专栏出错: {str(e)}")
+            return []
+
+    def batch_get_posts(self, post_ids, callback=None):
+        """
+        批量获取文章详情
+
+        参数:
+            post_ids: 文章 ID 列表
+            callback: 进度回调函数
+
+        返回:
+            文章详情列表
+        """
+        results = []
+        total = len(post_ids)
+
+        for i, post_id in enumerate(post_ids):
+            if callback:
+                callback(i + 1, total, post_id)
+
+            post_data = self.get_post(post_id)
+            if post_data:
+                results.append(post_data)
+
+        logger.info(f"批量获取完成，成功 {len(results)}/{total} 篇文章")
+        return results
 
 
 class DataProcessor:
