@@ -25,6 +25,10 @@ from crawler import (
     UrbanLegendAnalyzer,
     WikipediaAPICrawler,
     ZhihuZhuanlanCrawler,
+    MoegirlCrawler,
+    BilibiliCrawler,
+    GitHubCrawler,
+    WeiboCrawler,
     calculate_statistics,
     NumpyEncoder
 )
@@ -899,6 +903,224 @@ def zhihu_batch_posts():
         return jsonify({'error': str(e)}), 500
 
 
+# ==================== 萌娘百科 API 路由 ====================
+
+moegirl_crawler = None
+moegirl_crawler_test = None
+
+def get_moegirl_crawler(test_mode=False):
+    global moegirl_crawler, moegirl_crawler_test
+    if test_mode:
+        if moegirl_crawler_test is None:
+            moegirl_crawler_test = MoegirlCrawler(base_url='http://localhost:5000/mock/moegirl/api.php')
+        return moegirl_crawler_test
+    if moegirl_crawler is None:
+        moegirl_crawler = MoegirlCrawler()
+    return moegirl_crawler
+
+@app.route('/api/moegirl/search', methods=['GET'])
+def moegirl_search():
+    """搜索萌娘百科"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_moegirl_crawler()
+        results = crawler.search(query)
+        return jsonify({'query': query, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/moegirl/page', methods=['GET'])
+def moegirl_page():
+    """获取萌娘百科页面"""
+    title = request.args.get('title', '')
+    if not title:
+        return jsonify({'error': '请提供页面标题'}), 400
+    try:
+        crawler = get_moegirl_crawler()
+        page = crawler.get_page(title)
+        if not page:
+            return jsonify({'error': f'页面不存在: {title}'}), 404
+        return jsonify(page)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 哔哩哔哩 API 路由 ====================
+
+bilibili_crawler = None
+bilibili_crawler_test = None
+
+def get_bilibili_crawler(test_mode=False):
+    global bilibili_crawler, bilibili_crawler_test
+    if test_mode:
+        if bilibili_crawler_test is None:
+            bilibili_crawler_test = BilibiliCrawler(base_url='http://localhost:5000/mock/bilibili')
+        return bilibili_crawler_test
+    if bilibili_crawler is None:
+        bilibili_crawler = BilibiliCrawler()
+    return bilibili_crawler
+
+@app.route('/api/bilibili/video', methods=['GET'])
+def bilibili_video():
+    """获取B站视频信息"""
+    bvid = request.args.get('bvid', '')
+    if not bvid:
+        return jsonify({'error': '请提供视频 BVID'}), 400
+    try:
+        crawler = get_bilibili_crawler()
+        video = crawler.get_video_info(bvid)
+        if not video:
+            return jsonify({'error': f'视频不存在: {bvid}'}), 404
+        return jsonify(video)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bilibili/search', methods=['GET'])
+def bilibili_search():
+    """搜索B站视频"""
+    keyword = request.args.get('q', '')
+    if not keyword:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_bilibili_crawler()
+        results = crawler.search_video(keyword)
+        return jsonify({'query': keyword, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bilibili/user', methods=['GET'])
+def bilibili_user():
+    """获取B站用户信息"""
+    mid = request.args.get('mid', '')
+    if not mid:
+        return jsonify({'error': '请提供用户 MID'}), 400
+    try:
+        crawler = get_bilibili_crawler()
+        user = crawler.get_user_info(mid)
+        if not user:
+            return jsonify({'error': f'用户不存在: {mid}'}), 404
+        return jsonify(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== GitHub API 路由 ====================
+
+github_crawler = None
+github_crawler_test = None
+
+def get_github_crawler(test_mode=False):
+    global github_crawler, github_crawler_test
+    if test_mode:
+        if github_crawler_test is None:
+            github_crawler_test = GitHubCrawler(base_url='http://localhost:5000/mock/github')
+        return github_crawler_test
+    if github_crawler is None:
+        github_crawler = GitHubCrawler()
+    return github_crawler
+
+@app.route('/api/github/repo', methods=['GET'])
+def github_repo():
+    """获取 GitHub 仓库信息"""
+    owner = request.args.get('owner', '')
+    repo = request.args.get('repo', '')
+    if not owner or not repo:
+        return jsonify({'error': '请提供 owner 和 repo'}), 400
+    try:
+        crawler = get_github_crawler()
+        repo_info = crawler.get_repo(owner, repo)
+        if not repo_info:
+            return jsonify({'error': f'仓库不存在: {owner}/{repo}'}), 404
+        return jsonify(repo_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/github/readme', methods=['GET'])
+def github_readme():
+    """获取 GitHub 仓库 README"""
+    owner = request.args.get('owner', '')
+    repo = request.args.get('repo', '')
+    if not owner or not repo:
+        return jsonify({'error': '请提供 owner 和 repo'}), 400
+    try:
+        crawler = get_github_crawler()
+        readme = crawler.get_readme(owner, repo)
+        if not readme:
+            return jsonify({'error': f'README 不存在'}), 404
+        return jsonify(readme)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/github/search', methods=['GET'])
+def github_search():
+    """搜索 GitHub 仓库"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_github_crawler()
+        results = crawler.search_repos(query)
+        return jsonify({'query': query, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 微博 API 路由 ====================
+
+weibo_crawler = None
+weibo_crawler_test = None
+
+def get_weibo_crawler(test_mode=False):
+    global weibo_crawler, weibo_crawler_test
+    if test_mode:
+        if weibo_crawler_test is None:
+            weibo_crawler_test = WeiboCrawler(base_url='http://localhost:5000/mock/weibo/api')
+        return weibo_crawler_test
+    if weibo_crawler is None:
+        weibo_crawler = WeiboCrawler()
+    return weibo_crawler
+
+@app.route('/api/weibo/user', methods=['GET'])
+def weibo_user():
+    """获取微博用户信息"""
+    uid = request.args.get('uid', '')
+    if not uid:
+        return jsonify({'error': '请提供用户 UID'}), 400
+    try:
+        crawler = get_weibo_crawler()
+        user = crawler.get_user_info(uid)
+        if not user:
+            return jsonify({'error': f'用户不存在: {uid}'}), 404
+        return jsonify(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/weibo/posts', methods=['GET'])
+def weibo_posts():
+    """获取用户微博列表"""
+    uid = request.args.get('uid', '')
+    if not uid:
+        return jsonify({'error': '请提供用户 UID'}), 400
+    try:
+        crawler = get_weibo_crawler()
+        posts = crawler.get_user_weibos(uid)
+        return jsonify({'uid': uid, 'posts': posts, 'count': len(posts)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/weibo/hot', methods=['GET'])
+def weibo_hot():
+    """获取微博热搜"""
+    try:
+        crawler = get_weibo_crawler()
+        hot = crawler.get_hot_search()
+        return jsonify({'hot': hot, 'count': len(hot)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ==================== 测试模式 API 路由 ====================
 
 @app.route('/api/test/wiki/search', methods=['GET'])
@@ -1178,6 +1400,150 @@ MOCK_ZHIHU_DATA = {
     }
 }
 
+# 模拟萌娘百科数据
+MOCK_MOEGIRL_DATA = {
+    'pages': {
+        '初音未来': {
+            'pageid': 1001,
+            'title': '初音未来',
+            'extract': '初音未来（初音ミク，Hatsune Miku）是CRYPTON FUTURE MEDIA以Yamaha的VOCALOID系列语音合成程序为基础开发的音源库。',
+            'url': 'https://zh.moegirl.org.cn/初音未来',
+            'categories': ['VOCALOID角色', '虚拟歌手']
+        },
+        '原神': {
+            'pageid': 1002,
+            'title': '原神',
+            'extract': '《原神》是由米哈游开发的一款开放世界冒险游戏。游戏发生在一个被称作「提瓦特」的幻想世界。',
+            'url': 'https://zh.moegirl.org.cn/原神',
+            'categories': ['游戏', '米哈游']
+        }
+    }
+}
+
+# 模拟哔哩哔哩数据
+MOCK_BILIBILI_DATA = {
+    'videos': {
+        'BV1xx411c7mD': {
+            'bvid': 'BV1xx411c7mD',
+            'aid': 170001,
+            'title': '【原神】璃月港日出延时摄影',
+            'desc': '在璃月港拍摄的日出延时摄影作品',
+            'duration': 180,
+            'owner': {'mid': 123456, 'name': '测试UP主', 'face': 'https://example.com/face.jpg'},
+            'stat': {'view': 100000, 'danmaku': 500, 'reply': 200, 'favorite': 1000, 'coin': 500, 'share': 100, 'like': 5000},
+            'pubdate': 1704067200,
+            'tname': '生活',
+            'pic': 'https://example.com/cover.jpg'
+        },
+        'BV1GJ411x7h7': {
+            'bvid': 'BV1GJ411x7h7',
+            'aid': 170002,
+            'title': 'Python 教程：从入门到精通',
+            'desc': '最全面的 Python 编程教程',
+            'duration': 3600,
+            'owner': {'mid': 789012, 'name': '编程导师', 'face': 'https://example.com/face2.jpg'},
+            'stat': {'view': 500000, 'danmaku': 2000, 'reply': 1000, 'favorite': 10000, 'coin': 5000, 'share': 2000, 'like': 20000},
+            'pubdate': 1704153600,
+            'tname': '科技',
+            'pic': 'https://example.com/cover2.jpg'
+        }
+    },
+    'users': {
+        '123456': {
+            'mid': 123456,
+            'name': '测试UP主',
+            'face': 'https://example.com/face.jpg',
+            'sign': '热爱生活，热爱分享',
+            'level': 6
+        }
+    }
+}
+
+# 模拟 GitHub 数据
+MOCK_GITHUB_DATA = {
+    'repos': {
+        'torvalds/linux': {
+            'name': 'linux',
+            'full_name': 'torvalds/linux',
+            'description': 'Linux kernel source tree',
+            'html_url': 'https://github.com/torvalds/linux',
+            'language': 'C',
+            'stargazers_count': 180000,
+            'forks_count': 55000,
+            'open_issues_count': 300,
+            'topics': ['linux', 'kernel', 'operating-system'],
+            'created_at': '2011-09-04T22:48:12Z',
+            'updated_at': '2025-01-29T10:00:00Z',
+            'owner': {'login': 'torvalds', 'avatar_url': 'https://avatars.githubusercontent.com/u/1024025'}
+        },
+        'python/cpython': {
+            'name': 'cpython',
+            'full_name': 'python/cpython',
+            'description': 'The Python programming language',
+            'html_url': 'https://github.com/python/cpython',
+            'language': 'Python',
+            'stargazers_count': 60000,
+            'forks_count': 28000,
+            'open_issues_count': 7000,
+            'topics': ['python', 'cpython', 'programming-language'],
+            'created_at': '2017-02-10T19:23:51Z',
+            'updated_at': '2025-01-29T10:00:00Z',
+            'owner': {'login': 'python', 'avatar_url': 'https://avatars.githubusercontent.com/u/1525981'}
+        }
+    },
+    'readmes': {
+        'torvalds/linux': {
+            'name': 'README',
+            'path': 'README',
+            'content': '# Linux kernel\n\nThis is the Linux kernel source code.\n\n## Building\n\nTo build the kernel, run `make`.',
+            'html_url': 'https://github.com/torvalds/linux/blob/master/README'
+        }
+    }
+}
+
+# 模拟微博数据
+MOCK_WEIBO_DATA = {
+    'users': {
+        '1234567890': {
+            'id': 1234567890,
+            'screen_name': '测试用户',
+            'description': '这是一个测试账号',
+            'followers_count': 10000,
+            'follow_count': 500,
+            'statuses_count': 1000,
+            'profile_image_url': 'https://example.com/avatar.jpg',
+            'verified': True
+        }
+    },
+    'weibos': {
+        '1234567890': [
+            {
+                'id': 'M001',
+                'text': '今天天气真好，出门散步！#生活日常#',
+                'created_at': '刚刚',
+                'reposts_count': 10,
+                'comments_count': 20,
+                'attitudes_count': 100,
+                'source': 'iPhone客户端'
+            },
+            {
+                'id': 'M002',
+                'text': '分享一个好用的编程技巧...',
+                'created_at': '1小时前',
+                'reposts_count': 50,
+                'comments_count': 30,
+                'attitudes_count': 200,
+                'source': 'Android客户端'
+            }
+        ]
+    },
+    'hot': [
+        {'word': '热搜话题1', 'num': 1000000, 'rank': 1, 'category': '娱乐'},
+        {'word': '热搜话题2', 'num': 800000, 'rank': 2, 'category': '社会'},
+        {'word': '热搜话题3', 'num': 600000, 'rank': 3, 'category': '科技'}
+    ]
+}
+
 
 @app.route('/mock/wiki/api.php', methods=['GET'])
 def mock_wiki_api():
@@ -1276,6 +1642,201 @@ def mock_zhihu_post(post_id):
     if post_id in MOCK_ZHIHU_DATA['articles']:
         return jsonify(MOCK_ZHIHU_DATA['articles'][post_id])
     return jsonify({'error': 'Post not found'}), 404
+
+
+# ==================== 萌娘百科模拟 API ====================
+
+@app.route('/mock/moegirl/api.php', methods=['GET'])
+def mock_moegirl_api():
+    """模拟萌娘百科 MediaWiki API"""
+    action = request.args.get('action', '')
+
+    if action == 'query':
+        list_type = request.args.get('list', '')
+
+        if list_type == 'search':
+            query = request.args.get('srsearch', '')
+            results = []
+            for title, page in MOCK_MOEGIRL_DATA['pages'].items():
+                if query.lower() in title.lower() or query.lower() in page['extract'].lower():
+                    results.append({
+                        'title': title,
+                        'pageid': page['pageid'],
+                        'snippet': page['extract'][:100]
+                    })
+            return jsonify({'query': {'search': results}})
+
+        titles = request.args.get('titles', '')
+        if titles and titles in MOCK_MOEGIRL_DATA['pages']:
+            page = MOCK_MOEGIRL_DATA['pages'][titles]
+            return jsonify({'query': {'pages': {
+                str(page['pageid']): {
+                    'pageid': page['pageid'],
+                    'title': page['title'],
+                    'extract': page['extract'],
+                    'fullurl': page['url'],
+                    'categories': [{'title': c} for c in page['categories']]
+                }
+            }}})
+
+    return jsonify({'error': 'Unknown action'}), 400
+
+
+# ==================== 哔哩哔哩模拟 API ====================
+
+@app.route('/mock/bilibili/x/web-interface/view', methods=['GET'])
+def mock_bilibili_video():
+    """模拟B站视频信息 API"""
+    bvid = request.args.get('bvid', '')
+    if bvid in MOCK_BILIBILI_DATA['videos']:
+        return jsonify({'code': 0, 'data': MOCK_BILIBILI_DATA['videos'][bvid]})
+    return jsonify({'code': -404, 'message': 'Video not found'})
+
+@app.route('/mock/bilibili/x/web-interface/search/type', methods=['GET'])
+def mock_bilibili_search():
+    """模拟B站搜索 API"""
+    keyword = request.args.get('keyword', '')
+    results = []
+    for bvid, video in MOCK_BILIBILI_DATA['videos'].items():
+        if keyword.lower() in video['title'].lower():
+            results.append({
+                'bvid': bvid,
+                'title': video['title'],
+                'author': video['owner']['name'],
+                'play': video['stat']['view'],
+                'description': video['desc']
+            })
+    return jsonify({'code': 0, 'data': {'result': results}})
+
+@app.route('/mock/bilibili/x/space/acc/info', methods=['GET'])
+def mock_bilibili_user():
+    """模拟B站用户信息 API"""
+    mid = request.args.get('mid', '')
+    if mid in MOCK_BILIBILI_DATA['users']:
+        return jsonify({'code': 0, 'data': MOCK_BILIBILI_DATA['users'][mid]})
+    return jsonify({'code': -404, 'message': 'User not found'})
+
+
+# ==================== GitHub 模拟 API ====================
+
+@app.route('/mock/github/repos/<owner>/<repo>', methods=['GET'])
+def mock_github_repo(owner, repo):
+    """模拟 GitHub 仓库 API"""
+    key = f'{owner}/{repo}'
+    if key in MOCK_GITHUB_DATA['repos']:
+        return jsonify(MOCK_GITHUB_DATA['repos'][key])
+    return jsonify({'message': 'Not Found'}), 404
+
+@app.route('/mock/github/repos/<owner>/<repo>/readme', methods=['GET'])
+def mock_github_readme(owner, repo):
+    """模拟 GitHub README API"""
+    key = f'{owner}/{repo}'
+    if key in MOCK_GITHUB_DATA['readmes']:
+        readme = MOCK_GITHUB_DATA['readmes'][key]
+        import base64
+        return jsonify({
+            'name': readme['name'],
+            'path': readme['path'],
+            'content': base64.b64encode(readme['content'].encode()).decode(),
+            'html_url': readme['html_url']
+        })
+    return jsonify({'message': 'Not Found'}), 404
+
+@app.route('/mock/github/search/repositories', methods=['GET'])
+def mock_github_search():
+    """模拟 GitHub 搜索 API"""
+    query = request.args.get('q', '')
+    items = []
+    for key, repo in MOCK_GITHUB_DATA['repos'].items():
+        if query.lower() in repo['name'].lower() or query.lower() in (repo['description'] or '').lower():
+            items.append(repo)
+    return jsonify({'items': items})
+
+
+# ==================== 微博模拟 API ====================
+
+@app.route('/mock/weibo/api/container/getIndex', methods=['GET'])
+def mock_weibo_container():
+    """模拟微博容器 API"""
+    uid = request.args.get('value', '')
+    containerid = request.args.get('containerid', '')
+
+    if uid in MOCK_WEIBO_DATA['users']:
+        if containerid and containerid.startswith('107603'):
+            # 返回微博列表
+            weibos = MOCK_WEIBO_DATA['weibos'].get(uid, [])
+            cards = [{'card_type': 9, 'mblog': w} for w in weibos]
+            return jsonify({'ok': 1, 'data': {'cards': cards}})
+        else:
+            # 返回用户信息
+            return jsonify({'ok': 1, 'data': {'userInfo': MOCK_WEIBO_DATA['users'][uid]}})
+
+    return jsonify({'ok': 0, 'message': 'User not found'})
+
+
+# ==================== 测试路由 (新增平台) ====================
+
+@app.route('/api/test/moegirl/search', methods=['GET'])
+def test_moegirl_search():
+    """测试萌娘百科搜索"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_moegirl_crawler(test_mode=True)
+        results = crawler.search(query)
+        return jsonify({'mode': 'test', 'query': query, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test/bilibili/video', methods=['GET'])
+def test_bilibili_video():
+    """测试B站视频"""
+    bvid = request.args.get('bvid', '')
+    if not bvid:
+        return jsonify({'error': '请提供 BVID'}), 400
+    try:
+        crawler = get_bilibili_crawler(test_mode=True)
+        video = crawler.get_video_info(bvid)
+        if not video:
+            return jsonify({'error': f'视频不存在: {bvid}'}), 404
+        video['mode'] = 'test'
+        return jsonify(video)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test/github/repo', methods=['GET'])
+def test_github_repo():
+    """测试 GitHub 仓库"""
+    owner = request.args.get('owner', '')
+    repo = request.args.get('repo', '')
+    if not owner or not repo:
+        return jsonify({'error': '请提供 owner 和 repo'}), 400
+    try:
+        crawler = get_github_crawler(test_mode=True)
+        repo_info = crawler.get_repo(owner, repo)
+        if not repo_info:
+            return jsonify({'error': f'仓库不存在'}), 404
+        repo_info['mode'] = 'test'
+        return jsonify(repo_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test/weibo/user', methods=['GET'])
+def test_weibo_user():
+    """测试微博用户"""
+    uid = request.args.get('uid', '')
+    if not uid:
+        return jsonify({'error': '请提供 UID'}), 400
+    try:
+        crawler = get_weibo_crawler(test_mode=True)
+        user = crawler.get_user_info(uid)
+        if not user:
+            return jsonify({'error': f'用户不存在'}), 404
+        user['mode'] = 'test'
+        return jsonify(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

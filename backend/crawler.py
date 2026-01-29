@@ -1373,6 +1373,388 @@ class ZhihuZhuanlanCrawler:
         return results
 
 
+class MoegirlCrawler:
+    """
+    萌娘百科爬虫类
+    基于 MediaWiki API，与 Wikipedia 类似
+    """
+
+    def __init__(self, base_url=None):
+        self.base_url = base_url or 'https://zh.moegirl.org.cn/api.php'
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'HolographicLaplacianCrawler/1.0'
+        })
+        logger.info(f"MoegirlCrawler 初始化完成")
+
+    def search(self, query, limit=10):
+        """搜索萌娘百科"""
+        try:
+            params = {
+                'action': 'query',
+                'list': 'search',
+                'srsearch': query,
+                'srlimit': limit,
+                'format': 'json'
+            }
+            response = self.session.get(self.base_url, params=params, timeout=15)
+            data = response.json()
+
+            results = []
+            if 'query' in data and 'search' in data['query']:
+                for item in data['query']['search']:
+                    results.append({
+                        'title': item['title'],
+                        'snippet': item.get('snippet', '').replace('<span class="searchmatch">', '').replace('</span>', ''),
+                        'pageid': item['pageid']
+                    })
+            return results
+        except Exception as e:
+            logger.error(f"搜索萌娘百科出错: {str(e)}")
+            return []
+
+    def get_page(self, title):
+        """获取页面内容"""
+        try:
+            params = {
+                'action': 'query',
+                'titles': title,
+                'prop': 'extracts|info|categories',
+                'explaintext': True,
+                'inprop': 'url',
+                'format': 'json'
+            }
+            response = self.session.get(self.base_url, params=params, timeout=15)
+            data = response.json()
+
+            pages = data.get('query', {}).get('pages', {})
+            if not pages:
+                return None
+
+            page_data = list(pages.values())[0]
+            if 'missing' in page_data:
+                return None
+
+            return {
+                'title': page_data.get('title', title),
+                'pageid': page_data.get('pageid'),
+                'url': page_data.get('fullurl', f"https://zh.moegirl.org.cn/{title}"),
+                'text': page_data.get('extract', ''),
+                'categories': [c['title'] for c in page_data.get('categories', [])],
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取萌娘百科页面出错: {str(e)}")
+            return None
+
+
+class BilibiliCrawler:
+    """
+    哔哩哔哩爬虫类
+    获取视频信息、UP主信息等
+    """
+
+    def __init__(self, base_url=None):
+        self.base_url = base_url or 'https://api.bilibili.com'
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://www.bilibili.com'
+        })
+        logger.info("BilibiliCrawler 初始化完成")
+
+    def get_video_info(self, bvid):
+        """获取视频信息"""
+        try:
+            url = f"{self.base_url}/x/web-interface/view"
+            params = {'bvid': bvid}
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if data.get('code') != 0:
+                return None
+
+            video = data.get('data', {})
+            return {
+                'bvid': video.get('bvid'),
+                'aid': video.get('aid'),
+                'title': video.get('title'),
+                'desc': video.get('desc'),
+                'duration': video.get('duration'),
+                'owner': {
+                    'mid': video.get('owner', {}).get('mid'),
+                    'name': video.get('owner', {}).get('name'),
+                    'face': video.get('owner', {}).get('face')
+                },
+                'stat': {
+                    'view': video.get('stat', {}).get('view'),
+                    'danmaku': video.get('stat', {}).get('danmaku'),
+                    'reply': video.get('stat', {}).get('reply'),
+                    'favorite': video.get('stat', {}).get('favorite'),
+                    'coin': video.get('stat', {}).get('coin'),
+                    'share': video.get('stat', {}).get('share'),
+                    'like': video.get('stat', {}).get('like')
+                },
+                'pubdate': video.get('pubdate'),
+                'tname': video.get('tname'),
+                'pic': video.get('pic'),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取B站视频信息出错: {str(e)}")
+            return None
+
+    def search_video(self, keyword, page=1, page_size=20):
+        """搜索视频"""
+        try:
+            url = f"{self.base_url}/x/web-interface/search/type"
+            params = {
+                'search_type': 'video',
+                'keyword': keyword,
+                'page': page,
+                'page_size': page_size
+            }
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if data.get('code') != 0:
+                return []
+
+            results = []
+            for item in data.get('data', {}).get('result', []):
+                results.append({
+                    'bvid': item.get('bvid'),
+                    'title': item.get('title', '').replace('<em class="keyword">', '').replace('</em>', ''),
+                    'author': item.get('author'),
+                    'play': item.get('play'),
+                    'description': item.get('description')
+                })
+            return results
+        except Exception as e:
+            logger.error(f"搜索B站视频出错: {str(e)}")
+            return []
+
+    def get_user_info(self, mid):
+        """获取UP主信息"""
+        try:
+            url = f"{self.base_url}/x/space/acc/info"
+            params = {'mid': mid}
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if data.get('code') != 0:
+                return None
+
+            user = data.get('data', {})
+            return {
+                'mid': user.get('mid'),
+                'name': user.get('name'),
+                'face': user.get('face'),
+                'sign': user.get('sign'),
+                'level': user.get('level'),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取B站用户信息出错: {str(e)}")
+            return None
+
+
+class GitHubCrawler:
+    """
+    GitHub 爬虫类
+    获取仓库、文件、用户等信息
+    """
+
+    def __init__(self, base_url=None, token=None):
+        self.base_url = base_url or 'https://api.github.com'
+        self.session = requests.Session()
+        headers = {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'HolographicLaplacianCrawler/1.0'
+        }
+        if token:
+            headers['Authorization'] = f'token {token}'
+        self.session.headers.update(headers)
+        logger.info("GitHubCrawler 初始化完成")
+
+    def get_repo(self, owner, repo):
+        """获取仓库信息"""
+        try:
+            url = f"{self.base_url}/repos/{owner}/{repo}"
+            response = self.session.get(url, timeout=15)
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+            return {
+                'name': data.get('name'),
+                'full_name': data.get('full_name'),
+                'description': data.get('description'),
+                'html_url': data.get('html_url'),
+                'language': data.get('language'),
+                'stargazers_count': data.get('stargazers_count'),
+                'forks_count': data.get('forks_count'),
+                'open_issues_count': data.get('open_issues_count'),
+                'topics': data.get('topics', []),
+                'created_at': data.get('created_at'),
+                'updated_at': data.get('updated_at'),
+                'owner': {
+                    'login': data.get('owner', {}).get('login'),
+                    'avatar_url': data.get('owner', {}).get('avatar_url')
+                },
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取GitHub仓库信息出错: {str(e)}")
+            return None
+
+    def get_readme(self, owner, repo):
+        """获取仓库 README"""
+        try:
+            url = f"{self.base_url}/repos/{owner}/{repo}/readme"
+            response = self.session.get(url, timeout=15)
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+            import base64
+            content = base64.b64decode(data.get('content', '')).decode('utf-8')
+            return {
+                'name': data.get('name'),
+                'path': data.get('path'),
+                'content': content,
+                'html_url': data.get('html_url'),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取GitHub README出错: {str(e)}")
+            return None
+
+    def search_repos(self, query, sort='stars', page=1, per_page=10):
+        """搜索仓库"""
+        try:
+            url = f"{self.base_url}/search/repositories"
+            params = {'q': query, 'sort': sort, 'page': page, 'per_page': per_page}
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            results = []
+            for item in data.get('items', []):
+                results.append({
+                    'full_name': item.get('full_name'),
+                    'description': item.get('description'),
+                    'html_url': item.get('html_url'),
+                    'language': item.get('language'),
+                    'stargazers_count': item.get('stargazers_count'),
+                    'forks_count': item.get('forks_count')
+                })
+            return results
+        except Exception as e:
+            logger.error(f"搜索GitHub仓库出错: {str(e)}")
+            return []
+
+
+class WeiboCrawler:
+    """
+    微博爬虫类
+    获取用户微博、热搜等
+    """
+
+    def __init__(self, base_url=None):
+        self.base_url = base_url or 'https://m.weibo.cn/api'
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X)',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        })
+        logger.info("WeiboCrawler 初始化完成")
+
+    def get_user_info(self, uid):
+        """获取用户信息"""
+        try:
+            url = f"{self.base_url}/container/getIndex"
+            params = {'type': 'uid', 'value': uid}
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if data.get('ok') != 1:
+                return None
+
+            user = data.get('data', {}).get('userInfo', {})
+            return {
+                'id': user.get('id'),
+                'screen_name': user.get('screen_name'),
+                'description': user.get('description'),
+                'followers_count': user.get('followers_count'),
+                'follow_count': user.get('follow_count'),
+                'statuses_count': user.get('statuses_count'),
+                'profile_image_url': user.get('profile_image_url'),
+                'verified': user.get('verified'),
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"获取微博用户信息出错: {str(e)}")
+            return None
+
+    def get_user_weibos(self, uid, page=1):
+        """获取用户微博列表"""
+        try:
+            url = f"{self.base_url}/container/getIndex"
+            params = {
+                'type': 'uid',
+                'value': uid,
+                'containerid': f'107603{uid}',
+                'page': page
+            }
+            response = self.session.get(url, params=params, timeout=15)
+            data = response.json()
+
+            if data.get('ok') != 1:
+                return []
+
+            weibos = []
+            for card in data.get('data', {}).get('cards', []):
+                if card.get('card_type') == 9:
+                    mblog = card.get('mblog', {})
+                    weibos.append({
+                        'id': mblog.get('id'),
+                        'text': mblog.get('text', '').replace('<br />', '\n'),
+                        'created_at': mblog.get('created_at'),
+                        'reposts_count': mblog.get('reposts_count'),
+                        'comments_count': mblog.get('comments_count'),
+                        'attitudes_count': mblog.get('attitudes_count'),
+                        'source': mblog.get('source')
+                    })
+            return weibos
+        except Exception as e:
+            logger.error(f"获取微博列表出错: {str(e)}")
+            return []
+
+    def get_hot_search(self):
+        """获取微博热搜"""
+        try:
+            url = "https://weibo.com/ajax/side/hotSearch"
+            response = self.session.get(url, timeout=15)
+            data = response.json()
+
+            if data.get('ok') != 1:
+                return []
+
+            results = []
+            for item in data.get('data', {}).get('realtime', []):
+                results.append({
+                    'word': item.get('word'),
+                    'num': item.get('num'),
+                    'rank': item.get('rank'),
+                    'category': item.get('category')
+                })
+            return results
+        except Exception as e:
+            logger.error(f"获取微博热搜出错: {str(e)}")
+            return []
+
+
 class DataProcessor:
     """数据处理类，负责清洗和分类网页内容"""
     
