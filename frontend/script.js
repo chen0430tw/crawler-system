@@ -1875,31 +1875,21 @@ document.addEventListener('DOMContentLoaded', function() {
 function initWikipediaFunctions() {
     // 获取维基百科搜索表单
     const wikiSearchForm = document.getElementById('wiki-search-form');
-    
+
     if (wikiSearchForm) {
         wikiSearchForm.addEventListener('submit', function(e) {
             // 阻止表单默认提交行为
             e.preventDefault();
-            
+
             // 获取搜索关键词
             const query = document.getElementById('wiki-search-input').value.trim();
-            
+
             if (query) {
                 searchWikipedia(query);
             }
         });
     }
-    
-    // 绑定随机页面按钮点击事件
-    const randomPagesBtn = document.getElementById('wiki-random-pages-btn');
-    if (randomPagesBtn) {
-        randomPagesBtn.addEventListener('click', function() {
-            const count = document.getElementById('wiki-random-count').value || 5;
-            getRandomWikipediaPages(count);
-        });
-    }
-}
-    
+
     // 绑定分类爬取表单提交事件
     const wikiCategoryForm = document.getElementById('wiki-category-form');
     if (wikiCategoryForm) {
@@ -1912,7 +1902,7 @@ function initWikipediaFunctions() {
             }
         });
     }
-    
+
     // 绑定随机页面按钮点击事件
     const randomPagesBtn = document.getElementById('wiki-random-pages-btn');
     if (randomPagesBtn) {
@@ -1921,9 +1911,10 @@ function initWikipediaFunctions() {
             getRandomWikipediaPages(count);
         });
     }
-    
+
     // 初始化语言选择器
     initWikiLanguageSelector();
+}
 
 // 3. 创建维基百科标签页和内容区域
 function createWikipediaTab() {
