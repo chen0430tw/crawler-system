@@ -281,27 +281,28 @@ const ApiClient = {
      */
     searchWiki: async function(query, options = {}) {
         try {
-            // 构建查询参数
+            // 构建查询参数 - 使用后端期望的参数名 (q, lang)
             const params = new URLSearchParams({
-                query: query
+                q: query
             });
-            
+
             if (options.language) {
-                params.append('language', options.language);
+                params.append('lang', options.language);
             }
-            
+
             if (options.limit) {
                 params.append('limit', options.limit);
             }
-            
+
             const response = await fetch(`${API_BASE_URL}/wiki/search?${params.toString()}`);
-            
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || '搜索维基百科失败');
             }
-            
-            return await response.json();
+
+            const data = await response.json();
+            return data.results || [];
         } catch (error) {
             console.error('搜索维基百科出错:', error);
             throw error;
