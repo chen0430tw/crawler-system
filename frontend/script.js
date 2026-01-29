@@ -1844,7 +1844,10 @@ document.addEventListener('DOMContentLoaded', function() {
 // 1. 在现有的DOM加载事件中添加维基百科相关初始化
     // 初始化维基百科功能
     initWikipediaFunctions();
-    
+
+    // 初始化维基百科可视化功能（对所有用户）
+    setTimeout(initWikiVisualization, 1000);
+
     // 如果是第一次访问，显示维基百科功能介绍
     if (!localStorage.getItem('wikiFeatureIntroShown')) {
         setTimeout(() => {
@@ -1865,9 +1868,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 icon: 'info',
                 confirmButtonText: '了解了'
             });
-            
+
             localStorage.setItem('wikiFeatureIntroShown', 'true');
-            initWikiVisualization, 1000;
         }, 2000);
     }
 
@@ -2396,29 +2398,117 @@ function fetchWikipediaPage(url) {
         .then(pageData => {
             Swal.close();
 
-            // 显示页面内容
+            // 保存页面数据供下载使用
+            window._currentWikiPageData = pageData;
+
+            // 显示页面完整内容
+            const fullText = pageData.text || pageData.extract || '';
+            const summary = pageData.summary || '';
+            const categories = pageData.categories || [];
+            const links = pageData.links || [];
+
             Swal.fire({
                 icon: 'success',
                 title: pageData.title || '页面内容',
                 html: `
-                    <div style="text-align: left; max-height: 400px; overflow-y: auto;">
-                        <p><strong>摘要:</strong></p>
-                        <p>${pageData.summary || pageData.extract || '无摘要'}</p>
+                    <div style="text-align: left; max-height: 500px; overflow-y: auto;">
+                        <div class="mb-3">
+                            <strong>摘要:</strong>
+                            <p style="white-space: pre-wrap;">${summary || '无摘要'}</p>
+                        </div>
                         <hr>
-                        <p><a href="${url}" target="_blank">查看原页面</a></p>
+                        <div class="mb-3">
+                            <strong>正文内容:</strong>
+                            <div style="white-space: pre-wrap; font-size: 0.9em; background: #f8f9fa; padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto;">
+                                ${fullText || '无内容'}
+                            </div>
+                        </div>
+                        ${categories.length > 0 ? `
+                        <hr>
+                        <div class="mb-3">
+                            <strong>分类 (${categories.length}):</strong>
+                            <p style="font-size: 0.85em;">${categories.slice(0, 10).join(', ')}${categories.length > 10 ? '...' : ''}</p>
+                        </div>
+                        ` : ''}
+                        <hr>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a href="${url}" target="_blank">查看原页面</a>
+                            <button id="download-wiki-content-btn" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-download"></i> 下载内容
+                            </button>
+                        </div>
                     </div>
                 `,
                 confirmButtonText: '确定',
-                width: '600px'
+                width: '700px',
+                didOpen: () => {
+                    // 绑定下载按钮事件
+                    const downloadBtn = document.getElementById('download-wiki-content-btn');
+                    if (downloadBtn) {
+                        downloadBtn.addEventListener('click', function() {
+                            downloadWikiPageContent(pageData);
+                        });
+                    }
+                }
             });
         })
         .catch(error => {
             Swal.fire({
                 icon: 'error',
-                title: '提交失败',
-                text: error.message || '提交任务时发生错误'
+                title: '抓取失败',
+                text: error.message || '获取页面内容时发生错误'
             });
         });
+}
+
+// 6.1 下载维基百科页面内容
+function downloadWikiPageContent(pageData) {
+    const content = {
+        title: pageData.title || '未知标题',
+        url: pageData.url || '',
+        summary: pageData.summary || '',
+        text: pageData.text || pageData.extract || '',
+        categories: pageData.categories || [],
+        links: pageData.links || [],
+        fetched_at: new Date().toISOString()
+    };
+
+    // 生成文本格式内容
+    const textContent = `# ${content.title}
+URL: ${content.url}
+抓取时间: ${content.fetched_at}
+
+## 摘要
+${content.summary}
+
+## 正文
+${content.text}
+
+## 分类
+${content.categories.join(', ')}
+
+## 链接 (前50个)
+${content.links.slice(0, 50).join('\n')}
+`;
+
+    // 创建下载
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `wiki_${content.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+
+    Swal.fire({
+        icon: 'success',
+        title: '下载成功',
+        text: '页面内容已保存',
+        timer: 1500,
+        showConfirmButton: false
+    });
 }
 
 // 7. 抓取所有搜索结果
