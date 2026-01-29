@@ -851,10 +851,12 @@ class WikipediaAPICrawler:
             results = []
             if 'query' in data and 'search' in data['query']:
                 for item in data['query']['search']:
+                    title = item['title']
                     results.append({
-                        'title': item['title'],
+                        'title': title,
                         'snippet': item.get('snippet', '').replace('<span class="searchmatch">', '').replace('</span>', ''),
-                        'pageid': item['pageid']
+                        'page_id': item['pageid'],
+                        'url': f"https://{self.language}.wikipedia.org/wiki/{title.replace(' ', '_')}"
                     })
 
             logger.info(f"搜索 '{query}' 找到 {len(results)} 个结果")
@@ -1073,9 +1075,12 @@ class WikipediaAPICrawler:
             pages = []
             if 'query' in data and 'random' in data['query']:
                 for item in data['query']['random']:
+                    title = item['title']
                     pages.append({
-                        'title': item['title'],
-                        'pageid': item['id']
+                        'title': title,
+                        'page_id': item['id'],
+                        'url': f"https://{self.language}.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                        'snippet': ''  # 随机页面没有摘要
                     })
 
             logger.info(f"获取 {len(pages)} 个随机页面")
