@@ -19,10 +19,21 @@ from werkzeug.utils import secure_filename
 
 # 导入爬虫模块
 from crawler import (
-    WebCrawler, 
-    DataProcessor, 
-    StorageManager, 
-    UrbanLegendAnalyzer, 
+    WebCrawler,
+    DataProcessor,
+    StorageManager,
+    UrbanLegendAnalyzer,
+    WikipediaAPICrawler,
+    ZhihuZhuanlanCrawler,
+    MoegirlCrawler,
+    BilibiliCrawler,
+    GitHubCrawler,
+    WeiboCrawler,
+    YouTubeCrawler,
+    TiebaCrawler,
+    ArxivCrawler,
+    DocsCrawler,
+    CrawlerHub,
     calculate_statistics,
     NumpyEncoder
 )
@@ -522,12 +533,1016 @@ def health_check():
         'active_tasks': sum(1 for task in tasks.values() if task['status'] == TASK_STATUS['RUNNING'])
     })
 
+
+# ==================== Wikipedia API 路由 ====================
+
+# 全局 Wikipedia 爬虫实例缓存
+wiki_crawlers = {}
+wiki_crawlers_test = {}  # 测试模式爬虫缓存
+
+def get_wiki_crawler(language='zh', test_mode=False):
+    """获取或创建指定语言的 Wikipedia 爬虫实例"""
+    if test_mode:
+        if language not in wiki_crawlers_test:
+            # 使用本地模拟 API
+            wiki_crawlers_test[language] = WikipediaAPICrawler(
+                language=language,
+                base_url='http://localhost:5000/mock/wiki/api.php'
+            )
+        return wiki_crawlers_test[language]
+    else:
+        if language not in wiki_crawlers:
+            wiki_crawlers[language] = WikipediaAPICrawler(language=language)
+        return wiki_crawlers[language]
+
+
+@app.route('/api/wiki/search', methods=['GET'])
+def wiki_search():
+    """
+    搜索维基百科
+    参数:
+        q: 搜索关键词
+        lang: 语言 (默认 zh)
+        limit: 结果数量 (默认 10)
+    """
+    query = request.args.get('q', '')
+    language = request.args.get('lang', 'zh')
+    limit = int(request.args.get('limit', 10))
+
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        results = crawler.search(query, limit=limit)
+        return jsonify({
+            'query': query,
+            'language': language,
+            'results': results,
+            'count': len(results)
+        })
+    except Exception as e:
+        logger.error(f"Wikipedia 搜索出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/page', methods=['GET'])
+def wiki_get_page():
+    """
+    获取维基百科页面详情
+    参数:
+        title: 页面标题
+        lang: 语言 (默认 zh)
+    """
+    title = request.args.get('title', '')
+    language = request.args.get('lang', 'zh')
+
+    if not title:
+        return jsonify({'error': '请提供页面标题'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        page_data = crawler.get_page(title)
+
+        if not page_data:
+            return jsonify({'error': f'页面不存在: {title}'}), 404
+
+        return jsonify(page_data)
+    except Exception as e:
+        logger.error(f"获取 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/category', methods=['GET'])
+def wiki_get_category():
+    """
+    获取维基百科分类下的页面
+    参数:
+        name: 分类名称 (不含 Category: 前缀)
+        lang: 语言 (默认 zh)
+        depth: 递归深度 (默认 0)
+        limit: 最大页面数 (默认 50)
+    """
+    category_name = request.args.get('name', '')
+    language = request.args.get('lang', 'zh')
+    depth = int(request.args.get('depth', 0))
+    limit = int(request.args.get('limit', 50))
+
+    if not category_name:
+        return jsonify({'error': '请提供分类名称'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        pages = crawler.get_category_members(category_name, depth=depth, max_pages=limit)
+        return jsonify({
+            'category': category_name,
+            'language': language,
+            'depth': depth,
+            'pages': pages,
+            'count': len(pages)
+        })
+    except Exception as e:
+        logger.error(f"获取 Wikipedia 分类出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/random', methods=['GET'])
+def wiki_random_pages():
+    """
+    获取随机维基百科页面
+    参数:
+        lang: 语言 (默认 zh)
+        count: 数量 (默认 5)
+    """
+    language = request.args.get('lang', 'zh')
+    count = int(request.args.get('count', 5))
+
+    try:
+        crawler = get_wiki_crawler(language)
+        pages = crawler.get_random_pages(count=count)
+        return jsonify({
+            'language': language,
+            'pages': pages,
+            'count': len(pages)
+        })
+    except Exception as e:
+        logger.error(f"获取随机 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/batch', methods=['POST'])
+def wiki_batch_pages():
+    """
+    批量获取维基百科页面
+    请求体:
+        titles: 页面标题列表
+        lang: 语言 (默认 zh)
+    """
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    titles = request.json.get('titles', [])
+    language = request.json.get('lang', 'zh')
+
+    if not titles:
+        return jsonify({'error': '请提供页面标题列表'}), 400
+
+    if len(titles) > 20:
+        return jsonify({'error': '一次最多获取 20 个页面'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        pages = crawler.batch_get_pages(titles)
+        return jsonify({
+            'language': language,
+            'requested': len(titles),
+            'success': len(pages),
+            'pages': pages
+        })
+    except Exception as e:
+        logger.error(f"批量获取 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/languages', methods=['GET'])
+def wiki_languages():
+    """获取支持的维基百科语言列表"""
+    return jsonify({
+        'languages': WikipediaAPICrawler.SUPPORTED_LANGUAGES
+    })
+
+
+# ==================== 知乎专栏 API 路由 ====================
+
+# 全局知乎专栏爬虫实例
+zhihu_crawler = None
+zhihu_crawler_test = None  # 测试模式爬虫
+
+def get_zhihu_crawler(test_mode=False):
+    """获取或创建知乎专栏爬虫实例"""
+    global zhihu_crawler, zhihu_crawler_test
+    if test_mode:
+        if zhihu_crawler_test is None:
+            # 使用本地模拟 API
+            zhihu_crawler_test = ZhihuZhuanlanCrawler(
+                delay=0.1,  # 测试模式减少延迟
+                base_url='http://localhost:5000/mock/zhihu/api'
+            )
+        return zhihu_crawler_test
+    else:
+        if zhihu_crawler is None:
+            zhihu_crawler = ZhihuZhuanlanCrawler(delay=1.0)
+        return zhihu_crawler
+
+
+@app.route('/api/zhihu/column', methods=['GET'])
+def zhihu_get_column():
+    """
+    获取知乎专栏信息
+    参数:
+        slug: 专栏标识 (如 URL zhuanlan.zhihu.com/passer 中的 passer)
+    """
+    slug = request.args.get('slug', '')
+
+    if not slug:
+        return jsonify({'error': '请提供专栏标识 (slug)'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        column_info = crawler.get_column_info(slug)
+
+        if not column_info:
+            return jsonify({'error': f'专栏不存在或无法访问: {slug}'}), 404
+
+        return jsonify(column_info)
+    except Exception as e:
+        logger.error(f"获取知乎专栏出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/column/posts', methods=['GET'])
+def zhihu_get_column_posts():
+    """
+    获取知乎专栏文章列表
+    参数:
+        slug: 专栏标识
+        limit: 每页数量 (默认 20，最大 20)
+        offset: 偏移量 (默认 0)
+    """
+    slug = request.args.get('slug', '')
+    limit = int(request.args.get('limit', 20))
+    offset = int(request.args.get('offset', 0))
+
+    if not slug:
+        return jsonify({'error': '请提供专栏标识 (slug)'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        posts = crawler.get_column_posts(slug, limit=limit, offset=offset)
+
+        return jsonify({
+            'slug': slug,
+            'offset': offset,
+            'limit': limit,
+            'posts': posts,
+            'count': len(posts)
+        })
+    except Exception as e:
+        logger.error(f"获取知乎专栏文章列表出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/column/all', methods=['GET'])
+def zhihu_get_all_column_posts():
+    """
+    获取知乎专栏所有文章
+    参数:
+        slug: 专栏标识
+        max: 最大文章数 (默认 100)
+    """
+    slug = request.args.get('slug', '')
+    max_posts = int(request.args.get('max', 100))
+
+    if not slug:
+        return jsonify({'error': '请提供专栏标识 (slug)'}), 400
+
+    if max_posts > 500:
+        return jsonify({'error': '最大文章数不能超过 500'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        posts = crawler.get_all_column_posts(slug, max_posts=max_posts)
+
+        return jsonify({
+            'slug': slug,
+            'posts': posts,
+            'count': len(posts)
+        })
+    except Exception as e:
+        logger.error(f"获取知乎专栏所有文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/post', methods=['GET'])
+def zhihu_get_post():
+    """
+    获取知乎文章详情
+    参数:
+        id: 文章 ID
+    """
+    post_id = request.args.get('id', '')
+
+    if not post_id:
+        return jsonify({'error': '请提供文章 ID'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        post_data = crawler.get_post(post_id)
+
+        if not post_data:
+            return jsonify({'error': f'文章不存在: {post_id}'}), 404
+
+        return jsonify(post_data)
+    except Exception as e:
+        logger.error(f"获取知乎文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/search', methods=['GET'])
+def zhihu_search_columns():
+    """
+    搜索知乎专栏
+    参数:
+        q: 搜索关键词
+        limit: 结果数量 (默认 10)
+    """
+    query = request.args.get('q', '')
+    limit = int(request.args.get('limit', 10))
+
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        results = crawler.search_columns(query, limit=limit)
+
+        return jsonify({
+            'query': query,
+            'results': results,
+            'count': len(results)
+        })
+    except Exception as e:
+        logger.error(f"搜索知乎专栏出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zhihu/batch', methods=['POST'])
+def zhihu_batch_posts():
+    """
+    批量获取知乎文章
+    请求体:
+        ids: 文章 ID 列表
+    """
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    post_ids = request.json.get('ids', [])
+
+    if not post_ids:
+        return jsonify({'error': '请提供文章 ID 列表'}), 400
+
+    if len(post_ids) > 20:
+        return jsonify({'error': '一次最多获取 20 篇文章'}), 400
+
+    try:
+        crawler = get_zhihu_crawler()
+        posts = crawler.batch_get_posts(post_ids)
+
+        return jsonify({
+            'requested': len(post_ids),
+            'success': len(posts),
+            'posts': posts
+        })
+    except Exception as e:
+        logger.error(f"批量获取知乎文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 萌娘百科 API 路由 ====================
+
+moegirl_crawler = None
+moegirl_crawler_test = None
+
+def get_moegirl_crawler(test_mode=False):
+    global moegirl_crawler, moegirl_crawler_test
+    if test_mode:
+        if moegirl_crawler_test is None:
+            moegirl_crawler_test = MoegirlCrawler(base_url='http://localhost:5000/mock/moegirl/api.php')
+        return moegirl_crawler_test
+    if moegirl_crawler is None:
+        moegirl_crawler = MoegirlCrawler()
+    return moegirl_crawler
+
+@app.route('/api/moegirl/search', methods=['GET'])
+def moegirl_search():
+    """搜索萌娘百科"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_moegirl_crawler()
+        results = crawler.search(query)
+        return jsonify({'query': query, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/moegirl/page', methods=['GET'])
+def moegirl_page():
+    """获取萌娘百科页面"""
+    title = request.args.get('title', '')
+    if not title:
+        return jsonify({'error': '请提供页面标题'}), 400
+    try:
+        crawler = get_moegirl_crawler()
+        page = crawler.get_page(title)
+        if not page:
+            return jsonify({'error': f'页面不存在: {title}'}), 404
+        return jsonify(page)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 哔哩哔哩 API 路由 ====================
+
+bilibili_crawler = None
+bilibili_crawler_test = None
+
+def get_bilibili_crawler(test_mode=False):
+    global bilibili_crawler, bilibili_crawler_test
+    if test_mode:
+        if bilibili_crawler_test is None:
+            bilibili_crawler_test = BilibiliCrawler(base_url='http://localhost:5000/mock/bilibili')
+        return bilibili_crawler_test
+    if bilibili_crawler is None:
+        bilibili_crawler = BilibiliCrawler()
+    return bilibili_crawler
+
+@app.route('/api/bilibili/video', methods=['GET'])
+def bilibili_video():
+    """获取B站视频信息"""
+    bvid = request.args.get('bvid', '')
+    if not bvid:
+        return jsonify({'error': '请提供视频 BVID'}), 400
+    try:
+        crawler = get_bilibili_crawler()
+        video = crawler.get_video_info(bvid)
+        if not video:
+            return jsonify({'error': f'视频不存在: {bvid}'}), 404
+        return jsonify(video)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bilibili/search', methods=['GET'])
+def bilibili_search():
+    """搜索B站视频"""
+    keyword = request.args.get('q', '')
+    if not keyword:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_bilibili_crawler()
+        results = crawler.search_video(keyword)
+        return jsonify({'query': keyword, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bilibili/user', methods=['GET'])
+def bilibili_user():
+    """获取B站用户信息"""
+    mid = request.args.get('mid', '')
+    if not mid:
+        return jsonify({'error': '请提供用户 MID'}), 400
+    try:
+        crawler = get_bilibili_crawler()
+        user = crawler.get_user_info(mid)
+        if not user:
+            return jsonify({'error': f'用户不存在: {mid}'}), 404
+        return jsonify(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== GitHub API 路由 ====================
+
+github_crawler = None
+github_crawler_test = None
+
+def get_github_crawler(test_mode=False):
+    global github_crawler, github_crawler_test
+    if test_mode:
+        if github_crawler_test is None:
+            github_crawler_test = GitHubCrawler(base_url='http://localhost:5000/mock/github')
+        return github_crawler_test
+    if github_crawler is None:
+        github_crawler = GitHubCrawler()
+    return github_crawler
+
+@app.route('/api/github/repo', methods=['GET'])
+def github_repo():
+    """获取 GitHub 仓库信息"""
+    owner = request.args.get('owner', '')
+    repo = request.args.get('repo', '')
+    if not owner or not repo:
+        return jsonify({'error': '请提供 owner 和 repo'}), 400
+    try:
+        crawler = get_github_crawler()
+        repo_info = crawler.get_repo(owner, repo)
+        if not repo_info:
+            return jsonify({'error': f'仓库不存在: {owner}/{repo}'}), 404
+        return jsonify(repo_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/github/readme', methods=['GET'])
+def github_readme():
+    """获取 GitHub 仓库 README"""
+    owner = request.args.get('owner', '')
+    repo = request.args.get('repo', '')
+    if not owner or not repo:
+        return jsonify({'error': '请提供 owner 和 repo'}), 400
+    try:
+        crawler = get_github_crawler()
+        readme = crawler.get_readme(owner, repo)
+        if not readme:
+            return jsonify({'error': f'README 不存在'}), 404
+        return jsonify(readme)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/github/search', methods=['GET'])
+def github_search():
+    """搜索 GitHub 仓库"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_github_crawler()
+        results = crawler.search_repos(query)
+        return jsonify({'query': query, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 微博 API 路由 ====================
+
+weibo_crawler = None
+weibo_crawler_test = None
+
+def get_weibo_crawler(test_mode=False):
+    global weibo_crawler, weibo_crawler_test
+    if test_mode:
+        if weibo_crawler_test is None:
+            weibo_crawler_test = WeiboCrawler(base_url='http://localhost:5000/mock/weibo/api')
+        return weibo_crawler_test
+    if weibo_crawler is None:
+        weibo_crawler = WeiboCrawler()
+    return weibo_crawler
+
+@app.route('/api/weibo/user', methods=['GET'])
+def weibo_user():
+    """获取微博用户信息"""
+    uid = request.args.get('uid', '')
+    if not uid:
+        return jsonify({'error': '请提供用户 UID'}), 400
+    try:
+        crawler = get_weibo_crawler()
+        user = crawler.get_user_info(uid)
+        if not user:
+            return jsonify({'error': f'用户不存在: {uid}'}), 404
+        return jsonify(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/weibo/posts', methods=['GET'])
+def weibo_posts():
+    """获取用户微博列表"""
+    uid = request.args.get('uid', '')
+    if not uid:
+        return jsonify({'error': '请提供用户 UID'}), 400
+    try:
+        crawler = get_weibo_crawler()
+        posts = crawler.get_user_weibos(uid)
+        return jsonify({'uid': uid, 'posts': posts, 'count': len(posts)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/weibo/hot', methods=['GET'])
+def weibo_hot():
+    """获取微博热搜"""
+    try:
+        crawler = get_weibo_crawler()
+        hot = crawler.get_hot_search()
+        return jsonify({'hot': hot, 'count': len(hot)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== YouTube API 路由 ====================
+
+youtube_crawler = None
+youtube_crawler_test = None
+
+def get_youtube_crawler(test_mode=False, api_key=None):
+    global youtube_crawler, youtube_crawler_test
+    if test_mode:
+        if youtube_crawler_test is None:
+            youtube_crawler_test = YouTubeCrawler(base_url='http://localhost:5000/mock/youtube')
+        return youtube_crawler_test
+    if youtube_crawler is None:
+        youtube_crawler = YouTubeCrawler(api_key=api_key)
+    return youtube_crawler
+
+@app.route('/api/youtube/video', methods=['GET'])
+def youtube_video():
+    """获取 YouTube 视频信息"""
+    video_id = request.args.get('id', '')
+    if not video_id:
+        return jsonify({'error': '请提供视频 ID'}), 400
+    try:
+        crawler = get_youtube_crawler()
+        video = crawler.get_video_info(video_id)
+        if not video:
+            return jsonify({'error': f'视频不存在: {video_id}'}), 404
+        return jsonify(video)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/youtube/search', methods=['GET'])
+def youtube_search():
+    """搜索 YouTube 视频"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_youtube_crawler()
+        results = crawler.search_videos(query)
+        return jsonify({'query': query, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/youtube/channel', methods=['GET'])
+def youtube_channel():
+    """获取 YouTube 频道信息"""
+    channel_id = request.args.get('id', '')
+    if not channel_id:
+        return jsonify({'error': '请提供频道 ID'}), 400
+    try:
+        crawler = get_youtube_crawler()
+        channel = crawler.get_channel_info(channel_id)
+        if not channel:
+            return jsonify({'error': f'频道不存在: {channel_id}'}), 404
+        return jsonify(channel)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 贴吧 API 路由 ====================
+
+tieba_crawler = None
+tieba_crawler_test = None
+
+def get_tieba_crawler(test_mode=False):
+    global tieba_crawler, tieba_crawler_test
+    if test_mode:
+        if tieba_crawler_test is None:
+            tieba_crawler_test = TiebaCrawler(base_url='http://localhost:5000/mock/tieba')
+        return tieba_crawler_test
+    if tieba_crawler is None:
+        tieba_crawler = TiebaCrawler()
+    return tieba_crawler
+
+@app.route('/api/tieba/forum', methods=['GET'])
+def tieba_forum():
+    """获取贴吧信息"""
+    name = request.args.get('name', '')
+    if not name:
+        return jsonify({'error': '请提供贴吧名称'}), 400
+    try:
+        crawler = get_tieba_crawler()
+        forum = crawler.get_forum_info(name)
+        if not forum:
+            return jsonify({'error': f'贴吧不存在: {name}'}), 404
+        return jsonify(forum)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tieba/posts', methods=['GET'])
+def tieba_posts():
+    """获取贴吧帖子列表"""
+    name = request.args.get('name', '')
+    if not name:
+        return jsonify({'error': '请提供贴吧名称'}), 400
+    try:
+        crawler = get_tieba_crawler()
+        posts = crawler.get_forum_posts(name)
+        return jsonify({'name': name, 'posts': posts, 'count': len(posts)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tieba/post', methods=['GET'])
+def tieba_post_detail():
+    """获取帖子详情"""
+    post_id = request.args.get('id', '')
+    if not post_id:
+        return jsonify({'error': '请提供帖子 ID'}), 400
+    try:
+        crawler = get_tieba_crawler()
+        post = crawler.get_post_detail(post_id)
+        if not post:
+            return jsonify({'error': f'帖子不存在: {post_id}'}), 404
+        return jsonify(post)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== arXiv API 路由 ====================
+
+arxiv_crawler = None
+arxiv_crawler_test = None
+
+def get_arxiv_crawler(test_mode=False):
+    global arxiv_crawler, arxiv_crawler_test
+    if test_mode:
+        if arxiv_crawler_test is None:
+            arxiv_crawler_test = ArxivCrawler(base_url='http://localhost:5000/mock/arxiv/api/query')
+        return arxiv_crawler_test
+    if arxiv_crawler is None:
+        arxiv_crawler = ArxivCrawler()
+    return arxiv_crawler
+
+@app.route('/api/arxiv/search', methods=['GET'])
+def arxiv_search():
+    """搜索 arXiv 论文"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_arxiv_crawler()
+        papers = crawler.search_papers(query)
+        return jsonify({'query': query, 'papers': papers, 'count': len(papers)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/arxiv/paper', methods=['GET'])
+def arxiv_paper():
+    """获取 arXiv 论文详情"""
+    arxiv_id = request.args.get('id', '')
+    if not arxiv_id:
+        return jsonify({'error': '请提供论文 arXiv ID'}), 400
+    try:
+        crawler = get_arxiv_crawler()
+        paper = crawler.get_paper_by_id(arxiv_id)
+        if not paper:
+            return jsonify({'error': f'论文不存在: {arxiv_id}'}), 404
+        return jsonify(paper)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/arxiv/recent', methods=['GET'])
+def arxiv_recent():
+    """获取最新 arXiv 论文"""
+    category = request.args.get('category', 'cs.AI')
+    limit = int(request.args.get('limit', 10))
+    try:
+        crawler = get_arxiv_crawler()
+        papers = crawler.get_recent_papers(category=category, max_results=limit)
+        return jsonify({'category': category, 'papers': papers, 'count': len(papers)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 文档爬虫 API 路由 ====================
+
+@app.route('/api/docs/crawl', methods=['GET'])
+def docs_crawl():
+    """爬取文档页面"""
+    url = request.args.get('url', '')
+    if not url:
+        return jsonify({'error': '请提供文档URL'}), 400
+    try:
+        crawler = DocsCrawler()
+        result = crawler.crawl_docs_page(url)
+        if not result:
+            return jsonify({'error': f'无法爬取: {url}'}), 404
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 爬虫中台 API 路由 ====================
+
+# 全局爬虫中台实例
+crawler_hub = None
+
+def get_crawler_hub(test_mode=False):
+    """获取或创建爬虫中台实例"""
+    global crawler_hub
+    if crawler_hub is None:
+        crawler_hub = CrawlerHub(test_mode=test_mode, mock_base_url='http://localhost:5000')
+    elif crawler_hub.test_mode != test_mode:
+        crawler_hub.set_test_mode(test_mode)
+    return crawler_hub
+
+
+@app.route('/api/hub/status', methods=['GET'])
+def hub_status():
+    """获取爬虫中台状态"""
+    try:
+        hub = get_crawler_hub()
+        return jsonify(hub.get_status())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hub/platforms', methods=['GET'])
+def hub_platforms():
+    """获取支持的平台列表"""
+    try:
+        hub = get_crawler_hub()
+        platforms = []
+        for key in hub.get_supported_platforms():
+            info = hub.get_platform_info(key)
+            platforms.append({
+                'key': key,
+                'name': info['name'],
+                'name_cn': info['name_cn'],
+                'description': info['description']
+            })
+        return jsonify({'platforms': platforms, 'count': len(platforms)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hub/crawl', methods=['POST'])
+def hub_crawl():
+    """
+    通过爬虫中台执行爬取
+    请求体:
+        platform: 平台名称
+        method: 方法名
+        args: 位置参数列表 (可选)
+        kwargs: 关键字参数字典 (可选)
+        test_mode: 是否使用测试模式 (可选)
+    """
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    platform = request.json.get('platform', '')
+    method = request.json.get('method', '')
+    args = request.json.get('args', [])
+    kwargs = request.json.get('kwargs', {})
+    test_mode = request.json.get('test_mode', False)
+
+    if not platform or not method:
+        return jsonify({'error': '请提供 platform 和 method'}), 400
+
+    try:
+        hub = get_crawler_hub(test_mode=test_mode)
+        result = hub.crawl(platform, method, *args, **kwargs)
+        return jsonify({
+            'platform': platform,
+            'method': method,
+            'test_mode': test_mode,
+            'result': result
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except AttributeError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"爬虫中台爬取出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hub/batch', methods=['POST'])
+def hub_batch_crawl():
+    """
+    通过爬虫中台批量爬取
+    请求体:
+        tasks: 任务列表
+        test_mode: 是否使用测试模式 (可选)
+    """
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    tasks = request.json.get('tasks', [])
+    test_mode = request.json.get('test_mode', False)
+
+    if not tasks:
+        return jsonify({'error': '请提供任务列表'}), 400
+
+    try:
+        hub = get_crawler_hub(test_mode=test_mode)
+        results = hub.batch_crawl(tasks)
+        return jsonify({
+            'test_mode': test_mode,
+            'total': len(tasks),
+            'success': sum(1 for r in results if r['success']),
+            'results': results
+        })
+    except Exception as e:
+        logger.error(f"爬虫中台批量爬取出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hub/test', methods=['POST'])
+def hub_set_test_mode():
+    """
+    设置爬虫中台测试模式
+    请求体:
+        enabled: 是否启用测试模式
+    """
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    enabled = request.json.get('enabled', False)
+
+    try:
+        hub = get_crawler_hub()
+        hub.set_test_mode(enabled)
+        return jsonify({
+            'message': f"测试模式已{'启用' if enabled else '禁用'}",
+            'test_mode': hub.test_mode
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 测试模式 API 路由 ====================
+
+@app.route('/api/test/wiki/search', methods=['GET'])
+def test_wiki_search():
+    """使用模拟数据测试 Wikipedia 搜索"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language='zh', test_mode=True)
+        results = crawler.search(query, limit=10)
+        return jsonify({
+            'mode': 'test',
+            'query': query,
+            'results': results,
+            'count': len(results)
+        })
+    except Exception as e:
+        logger.error(f"测试 Wikipedia 搜索出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/wiki/page', methods=['GET'])
+def test_wiki_page():
+    """使用模拟数据测试获取 Wikipedia 页面"""
+    title = request.args.get('title', '')
+    if not title:
+        return jsonify({'error': '请提供页面标题'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language='zh', test_mode=True)
+        page_data = crawler.get_page(title)
+        if not page_data:
+            return jsonify({'error': f'页面不存在: {title}'}), 404
+        page_data['mode'] = 'test'
+        return jsonify(page_data)
+    except Exception as e:
+        logger.error(f"测试获取 Wikipedia 页面出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/zhihu/column', methods=['GET'])
+def test_zhihu_column():
+    """使用模拟数据测试获取知乎专栏"""
+    slug = request.args.get('slug', '')
+    if not slug:
+        return jsonify({'error': '请提供专栏标识'}), 400
+
+    try:
+        crawler = get_zhihu_crawler(test_mode=True)
+        column_info = crawler.get_column_info(slug)
+        if not column_info:
+            return jsonify({'error': f'专栏不存在: {slug}'}), 404
+        column_info['mode'] = 'test'
+        return jsonify(column_info)
+    except Exception as e:
+        logger.error(f"测试获取知乎专栏出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/zhihu/post', methods=['GET'])
+def test_zhihu_post():
+    """使用模拟数据测试获取知乎文章"""
+    post_id = request.args.get('id', '')
+    if not post_id:
+        return jsonify({'error': '请提供文章 ID'}), 400
+
+    try:
+        crawler = get_zhihu_crawler(test_mode=True)
+        post_data = crawler.get_post(post_id)
+        if not post_data:
+            return jsonify({'error': f'文章不存在: {post_id}'}), 404
+        post_data['mode'] = 'test'
+        return jsonify(post_data)
+    except Exception as e:
+        logger.error(f"测试获取知乎文章出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/', methods=['GET'])
 def index():
     """默认路由"""
     return jsonify({
         'message': '全息拉普拉斯互联网爬虫系统API服务',
-        'version': '1.0.0',
+        'version': '1.2.0',
         'endpoints': [
             '/api/submit - 提交爬虫任务',
             '/api/status/<task_id> - 获取任务状态',
@@ -536,9 +1551,1009 @@ def index():
             '/api/tasks - 列出所有任务',
             '/api/cancel/<task_id> - 取消任务',
             '/api/upload - 上传配置文件',
+            '/api/wiki/search - 搜索维基百科',
+            '/api/wiki/page - 获取维基百科页面',
+            '/api/wiki/category - 获取分类页面',
+            '/api/wiki/random - 获取随机页面',
+            '/api/wiki/batch - 批量获取页面',
+            '/api/wiki/languages - 获取支持的语言',
+            '/api/zhihu/column - 获取知乎专栏信息',
+            '/api/zhihu/column/posts - 获取专栏文章列表',
+            '/api/zhihu/column/all - 获取专栏所有文章',
+            '/api/zhihu/post - 获取文章详情',
+            '/api/zhihu/search - 搜索知乎专栏',
+            '/api/zhihu/batch - 批量获取文章',
             '/health - 健康检查'
         ]
     })
+
+
+# ==================== 模拟测试 API (Mock API for Testing) ====================
+
+# 模拟 Wikipedia 数据
+MOCK_WIKI_DATA = {
+    'pages': {
+        'Python': {
+            'pageid': 23862,
+            'title': 'Python',
+            'extract': 'Python是一种广泛使用的解释型、高级和通用的编程语言。Python的设计哲学强调代码的可读性和简洁的语法。Python支持多种编程范型，包括结构化、过程化、反射式、面向对象和函数式编程。',
+            'url': 'https://zh.wikipedia.org/wiki/Python',
+            'categories': ['编程语言', '脚本语言', '面向对象的编程语言'],
+            'links': ['编程语言', '解释型语言', '面向对象编程'],
+            'sections': [
+                {'title': '历史', 'level': 1, 'text': 'Python由吉多·范罗苏姆创造，第一版发布于1991年。'},
+                {'title': '特性', 'level': 1, 'text': 'Python是一种多范型编程语言，支持面向对象、命令式、函数式编程。'},
+                {'title': '语法', 'level': 1, 'text': 'Python使用缩进来表示代码块，而不是使用大括号。'}
+            ]
+        },
+        '人工智能': {
+            'pageid': 12345,
+            'title': '人工智能',
+            'extract': '人工智能（英语：Artificial Intelligence，缩写为AI）亦称人工智慧、机器智能，指由人制造出来的机器所表现出来的智能。',
+            'url': 'https://zh.wikipedia.org/wiki/人工智能',
+            'categories': ['人工智能', '计算机科学'],
+            'links': ['机器学习', '深度学习', '神经网络'],
+            'sections': [
+                {'title': '定义', 'level': 1, 'text': '人工智能的定义可以分为两部分。'},
+                {'title': '历史', 'level': 1, 'text': '人工智能的研究始于20世纪50年代。'}
+            ]
+        },
+        '机器学习': {
+            'pageid': 67890,
+            'title': '机器学习',
+            'extract': '机器学习是人工智能的一个分支，是一门多领域交叉学科，涉及概率论、统计学、算法复杂度理论等多门学科。',
+            'url': 'https://zh.wikipedia.org/wiki/机器学习',
+            'categories': ['机器学习', '人工智能', '统计学'],
+            'links': ['深度学习', '神经网络', '监督学习'],
+            'sections': []
+        }
+    },
+    'categories': {
+        '编程语言': [
+            {'title': 'Python', 'pageid': 23862},
+            {'title': 'Java', 'pageid': 11111},
+            {'title': 'JavaScript', 'pageid': 22222}
+        ],
+        '人工智能': [
+            {'title': '机器学习', 'pageid': 67890},
+            {'title': '深度学习', 'pageid': 33333},
+            {'title': '自然语言处理', 'pageid': 44444}
+        ]
+    }
+}
+
+# 模拟知乎专栏数据
+MOCK_ZHIHU_DATA = {
+    'columns': {
+        'test-column': {
+            'slug': 'test-column',
+            'title': '测试专栏',
+            'description': '这是一个用于测试的知乎专栏',
+            'intro': '专栏简介内容',
+            'articlesCount': 3,
+            'followersCount': 1234,
+            'creator': {
+                'name': '测试作者',
+                'urlToken': 'test-author',
+                'avatar': {'url': 'https://example.com/avatar.jpg'}
+            },
+            'imageUrl': 'https://example.com/column.jpg'
+        },
+        'tech-column': {
+            'slug': 'tech-column',
+            'title': '技术分享',
+            'description': '分享技术文章和编程经验',
+            'intro': '专注于技术领域的专栏',
+            'articlesCount': 5,
+            'followersCount': 5678,
+            'creator': {
+                'name': '技术达人',
+                'urlToken': 'tech-master',
+                'avatar': {'url': 'https://example.com/tech-avatar.jpg'}
+            },
+            'imageUrl': 'https://example.com/tech-column.jpg'
+        }
+    },
+    'posts': {
+        'test-column': [
+            {
+                'id': '100001',
+                'title': '第一篇测试文章',
+                'excerpt': '这是文章摘要内容...',
+                'url': 'https://zhuanlan.zhihu.com/p/100001',
+                'created': '2025-01-15T10:00:00',
+                'updated': '2025-01-15T12:00:00',
+                'voteupCount': 100,
+                'commentCount': 20,
+                'author': {'name': '测试作者'}
+            },
+            {
+                'id': '100002',
+                'title': '第二篇测试文章',
+                'excerpt': '另一篇文章的摘要...',
+                'url': 'https://zhuanlan.zhihu.com/p/100002',
+                'created': '2025-01-16T10:00:00',
+                'updated': '2025-01-16T12:00:00',
+                'voteupCount': 150,
+                'commentCount': 30,
+                'author': {'name': '测试作者'}
+            },
+            {
+                'id': '100003',
+                'title': '第三篇测试文章',
+                'excerpt': '第三篇文章摘要内容...',
+                'url': 'https://zhuanlan.zhihu.com/p/100003',
+                'created': '2025-01-17T10:00:00',
+                'updated': '2025-01-17T12:00:00',
+                'voteupCount': 200,
+                'commentCount': 40,
+                'author': {'name': '测试作者'}
+            }
+        ],
+        'tech-column': [
+            {
+                'id': '200001',
+                'title': 'Python 入门教程',
+                'excerpt': 'Python 是一门简单易学的编程语言...',
+                'url': 'https://zhuanlan.zhihu.com/p/200001',
+                'created': '2025-01-10T10:00:00',
+                'updated': '2025-01-10T12:00:00',
+                'voteupCount': 500,
+                'commentCount': 100,
+                'author': {'name': '技术达人'}
+            }
+        ]
+    },
+    'articles': {
+        '100001': {
+            'id': '100001',
+            'title': '第一篇测试文章',
+            'content': '<p>这是第一篇测试文章的完整内容。</p><p>包含多个段落和丰富的文字描述。</p><h2>第一章</h2><p>章节内容...</p>',
+            'excerpt': '这是文章摘要内容...',
+            'url': 'https://zhuanlan.zhihu.com/p/100001',
+            'created': '2025-01-15T10:00:00',
+            'updated': '2025-01-15T12:00:00',
+            'voteupCount': 100,
+            'commentCount': 20,
+            'author': {'name': '测试作者', 'urlToken': 'test-author', 'bio': '专栏作者'},
+            'column': {'slug': 'test-column', 'title': '测试专栏'},
+            'topics': [{'name': '测试'}, {'name': '技术'}]
+        },
+        '200001': {
+            'id': '200001',
+            'title': 'Python 入门教程',
+            'content': '<p>Python 是一门简单易学的编程语言。</p><h2>安装 Python</h2><p>首先需要下载并安装 Python...</p><h2>Hello World</h2><p>print("Hello, World!")</p>',
+            'excerpt': 'Python 是一门简单易学的编程语言...',
+            'url': 'https://zhuanlan.zhihu.com/p/200001',
+            'created': '2025-01-10T10:00:00',
+            'updated': '2025-01-10T12:00:00',
+            'voteupCount': 500,
+            'commentCount': 100,
+            'author': {'name': '技术达人', 'urlToken': 'tech-master', 'bio': '技术分享者'},
+            'column': {'slug': 'tech-column', 'title': '技术分享'},
+            'topics': [{'name': 'Python'}, {'name': '编程'}]
+        }
+    }
+}
+
+# 模拟萌娘百科数据
+MOCK_MOEGIRL_DATA = {
+    'pages': {
+        '初音未来': {
+            'pageid': 1001,
+            'title': '初音未来',
+            'extract': '初音未来（初音ミク，Hatsune Miku）是CRYPTON FUTURE MEDIA以Yamaha的VOCALOID系列语音合成程序为基础开发的音源库。',
+            'url': 'https://zh.moegirl.org.cn/初音未来',
+            'categories': ['VOCALOID角色', '虚拟歌手']
+        },
+        '原神': {
+            'pageid': 1002,
+            'title': '原神',
+            'extract': '《原神》是由米哈游开发的一款开放世界冒险游戏。游戏发生在一个被称作「提瓦特」的幻想世界。',
+            'url': 'https://zh.moegirl.org.cn/原神',
+            'categories': ['游戏', '米哈游']
+        }
+    }
+}
+
+# 模拟哔哩哔哩数据
+MOCK_BILIBILI_DATA = {
+    'videos': {
+        'BV1xx411c7mD': {
+            'bvid': 'BV1xx411c7mD',
+            'aid': 170001,
+            'title': '【原神】璃月港日出延时摄影',
+            'desc': '在璃月港拍摄的日出延时摄影作品',
+            'duration': 180,
+            'owner': {'mid': 123456, 'name': '测试UP主', 'face': 'https://example.com/face.jpg'},
+            'stat': {'view': 100000, 'danmaku': 500, 'reply': 200, 'favorite': 1000, 'coin': 500, 'share': 100, 'like': 5000},
+            'pubdate': 1704067200,
+            'tname': '生活',
+            'pic': 'https://example.com/cover.jpg'
+        },
+        'BV1GJ411x7h7': {
+            'bvid': 'BV1GJ411x7h7',
+            'aid': 170002,
+            'title': 'Python 教程：从入门到精通',
+            'desc': '最全面的 Python 编程教程',
+            'duration': 3600,
+            'owner': {'mid': 789012, 'name': '编程导师', 'face': 'https://example.com/face2.jpg'},
+            'stat': {'view': 500000, 'danmaku': 2000, 'reply': 1000, 'favorite': 10000, 'coin': 5000, 'share': 2000, 'like': 20000},
+            'pubdate': 1704153600,
+            'tname': '科技',
+            'pic': 'https://example.com/cover2.jpg'
+        }
+    },
+    'users': {
+        '123456': {
+            'mid': 123456,
+            'name': '测试UP主',
+            'face': 'https://example.com/face.jpg',
+            'sign': '热爱生活，热爱分享',
+            'level': 6
+        }
+    }
+}
+
+# 模拟 GitHub 数据
+MOCK_GITHUB_DATA = {
+    'repos': {
+        'torvalds/linux': {
+            'name': 'linux',
+            'full_name': 'torvalds/linux',
+            'description': 'Linux kernel source tree',
+            'html_url': 'https://github.com/torvalds/linux',
+            'language': 'C',
+            'stargazers_count': 180000,
+            'forks_count': 55000,
+            'open_issues_count': 300,
+            'topics': ['linux', 'kernel', 'operating-system'],
+            'created_at': '2011-09-04T22:48:12Z',
+            'updated_at': '2025-01-29T10:00:00Z',
+            'owner': {'login': 'torvalds', 'avatar_url': 'https://avatars.githubusercontent.com/u/1024025'}
+        },
+        'python/cpython': {
+            'name': 'cpython',
+            'full_name': 'python/cpython',
+            'description': 'The Python programming language',
+            'html_url': 'https://github.com/python/cpython',
+            'language': 'Python',
+            'stargazers_count': 60000,
+            'forks_count': 28000,
+            'open_issues_count': 7000,
+            'topics': ['python', 'cpython', 'programming-language'],
+            'created_at': '2017-02-10T19:23:51Z',
+            'updated_at': '2025-01-29T10:00:00Z',
+            'owner': {'login': 'python', 'avatar_url': 'https://avatars.githubusercontent.com/u/1525981'}
+        }
+    },
+    'readmes': {
+        'torvalds/linux': {
+            'name': 'README',
+            'path': 'README',
+            'content': '# Linux kernel\n\nThis is the Linux kernel source code.\n\n## Building\n\nTo build the kernel, run `make`.',
+            'html_url': 'https://github.com/torvalds/linux/blob/master/README'
+        }
+    }
+}
+
+# 模拟微博数据
+MOCK_WEIBO_DATA = {
+    'users': {
+        '1234567890': {
+            'id': 1234567890,
+            'screen_name': '测试用户',
+            'description': '这是一个测试账号',
+            'followers_count': 10000,
+            'follow_count': 500,
+            'statuses_count': 1000,
+            'profile_image_url': 'https://example.com/avatar.jpg',
+            'verified': True
+        }
+    },
+    'weibos': {
+        '1234567890': [
+            {
+                'id': 'M001',
+                'text': '今天天气真好，出门散步！#生活日常#',
+                'created_at': '刚刚',
+                'reposts_count': 10,
+                'comments_count': 20,
+                'attitudes_count': 100,
+                'source': 'iPhone客户端'
+            },
+            {
+                'id': 'M002',
+                'text': '分享一个好用的编程技巧...',
+                'created_at': '1小时前',
+                'reposts_count': 50,
+                'comments_count': 30,
+                'attitudes_count': 200,
+                'source': 'Android客户端'
+            }
+        ]
+    },
+    'hot': [
+        {'word': '热搜话题1', 'num': 1000000, 'rank': 1, 'category': '娱乐'},
+        {'word': '热搜话题2', 'num': 800000, 'rank': 2, 'category': '社会'},
+        {'word': '热搜话题3', 'num': 600000, 'rank': 3, 'category': '科技'}
+    ]
+}
+
+# 模拟 YouTube 数据
+MOCK_YOUTUBE_DATA = {
+    'videos': {
+        'dQw4w9WgXcQ': {
+            'video_id': 'dQw4w9WgXcQ',
+            'title': 'Rick Astley - Never Gonna Give You Up',
+            'description': 'The official video for Rick Astley\'s Never Gonna Give You Up',
+            'channel_title': 'Rick Astley',
+            'channel_id': 'UCuAXFkgsw1L7xaCfnd5JJOw',
+            'published_at': '2009-10-25T06:57:33Z',
+            'tags': ['music', '80s', 'classic'],
+            'view_count': 1500000000,
+            'like_count': 15000000,
+            'comment_count': 3000000,
+            'duration': 'PT3M33S'
+        },
+        'jNQXAC9IVRw': {
+            'video_id': 'jNQXAC9IVRw',
+            'title': 'Me at the zoo',
+            'description': 'The first video on YouTube',
+            'channel_title': 'jawed',
+            'channel_id': 'UC4QobU6STFB0P71PMvOGN5A',
+            'published_at': '2005-04-23T20:31:52Z',
+            'tags': ['zoo', 'elephants', 'first'],
+            'view_count': 300000000,
+            'like_count': 12000000,
+            'comment_count': 2000000,
+            'duration': 'PT0M19S'
+        }
+    },
+    'channels': {
+        'UCuAXFkgsw1L7xaCfnd5JJOw': {
+            'channel_id': 'UCuAXFkgsw1L7xaCfnd5JJOw',
+            'title': 'Rick Astley',
+            'description': 'Official YouTube channel of Rick Astley',
+            'custom_url': '@RickAstleyYT',
+            'thumbnail': 'https://example.com/rick.jpg',
+            'subscriber_count': 5000000,
+            'video_count': 50,
+            'view_count': 2000000000
+        }
+    }
+}
+
+# 模拟贴吧数据
+MOCK_TIEBA_DATA = {
+    'forums': {
+        '原神': {
+            'name': '原神',
+            'title': '原神吧',
+            'member_count': '3000万',
+            'post_count': '5亿'
+        },
+        'Python': {
+            'name': 'Python',
+            'title': 'Python吧',
+            'member_count': '100万',
+            'post_count': '500万'
+        }
+    },
+    'posts': {
+        '原神': [
+            {'title': '4.5版本更新公告', 'url': '/p/123456', 'author': '官方账号', 'reply_count': '10000'},
+            {'title': '新角色强度分析', 'url': '/p/123457', 'author': '攻略组', 'reply_count': '5000'},
+            {'title': '今日抽卡分享', 'url': '/p/123458', 'author': '路人甲', 'reply_count': '200'}
+        ],
+        'Python': [
+            {'title': 'Python入门指南', 'url': '/p/234567', 'author': '大神', 'reply_count': '1000'},
+            {'title': '爬虫框架对比', 'url': '/p/234568', 'author': '技术宅', 'reply_count': '500'}
+        ]
+    },
+    'post_details': {
+        '123456': {
+            'post_id': '123456',
+            'title': '4.5版本更新公告',
+            'content': '亲爱的旅行者们，4.5版本「光影流金」将于xx月xx日正式上线...',
+            'author': '官方账号',
+            'url': 'https://tieba.baidu.com/p/123456'
+        }
+    }
+}
+
+# 模拟 arXiv 数据
+MOCK_ARXIV_DATA = {
+    'papers': {
+        '2401.12345': {
+            'arxiv_id': '2401.12345',
+            'title': 'Attention Is All You Need: A Survey',
+            'summary': 'This paper presents a comprehensive survey of Transformer architectures and their applications in natural language processing, computer vision, and beyond.',
+            'authors': ['John Smith', 'Jane Doe', 'Alice Johnson'],
+            'categories': ['cs.CL', 'cs.LG'],
+            'published': '2024-01-15T00:00:00Z',
+            'updated': '2024-01-20T00:00:00Z',
+            'pdf_url': 'https://arxiv.org/pdf/2401.12345'
+        },
+        '2401.67890': {
+            'arxiv_id': '2401.67890',
+            'title': 'Large Language Models: A Deep Dive',
+            'summary': 'We explore the architecture, training, and capabilities of large language models, with a focus on recent developments in the field.',
+            'authors': ['Bob Wilson', 'Carol Lee'],
+            'categories': ['cs.AI', 'cs.CL'],
+            'published': '2024-01-18T00:00:00Z',
+            'updated': '2024-01-22T00:00:00Z',
+            'pdf_url': 'https://arxiv.org/pdf/2401.67890'
+        }
+    },
+    'recent': {
+        'cs.AI': [
+            {'arxiv_id': '2501.00001', 'title': 'Recent Advances in AI', 'authors': ['AI Researcher'], 'published': '2025-01-28T00:00:00Z'},
+            {'arxiv_id': '2501.00002', 'title': 'Neural Network Optimization', 'authors': ['Deep Learner'], 'published': '2025-01-27T00:00:00Z'}
+        ],
+        'cs.CL': [
+            {'arxiv_id': '2501.00003', 'title': 'Multilingual NLP', 'authors': ['NLP Expert'], 'published': '2025-01-28T00:00:00Z'}
+        ]
+    }
+}
+
+
+@app.route('/mock/wiki/api.php', methods=['GET'])
+def mock_wiki_api():
+    """模拟 Wikipedia MediaWiki API"""
+    action = request.args.get('action', '')
+    format_type = request.args.get('format', 'json')
+
+    if action == 'query':
+        list_type = request.args.get('list', '')
+        prop = request.args.get('prop', '')
+
+        # 搜索 API
+        if list_type == 'search':
+            query = request.args.get('srsearch', '')
+            limit = int(request.args.get('srlimit', 10))
+            results = []
+            for title, page in MOCK_WIKI_DATA['pages'].items():
+                if query.lower() in title.lower() or query.lower() in page['extract'].lower():
+                    results.append({
+                        'title': title,
+                        'pageid': page['pageid'],
+                        'snippet': page['extract'][:100]
+                    })
+            return jsonify({'query': {'search': results[:limit]}})
+
+        # 随机页面 API
+        if list_type == 'random':
+            count = int(request.args.get('rnlimit', 5))
+            import random
+            pages = list(MOCK_WIKI_DATA['pages'].values())
+            random.shuffle(pages)
+            results = [{'title': p['title'], 'id': p['pageid']} for p in pages[:count]]
+            return jsonify({'query': {'random': results}})
+
+        # 分类成员 API
+        if list_type == 'categorymembers':
+            cat_title = request.args.get('cmtitle', '').replace('Category:', '')
+            members = MOCK_WIKI_DATA['categories'].get(cat_title, [])
+            results = [{'title': m['title'], 'pageid': m['pageid'], 'ns': 0} for m in members]
+            return jsonify({'query': {'categorymembers': results}})
+
+        # 页面内容 API
+        titles = request.args.get('titles', '')
+        if titles and titles in MOCK_WIKI_DATA['pages']:
+            page = MOCK_WIKI_DATA['pages'][titles]
+            page_data = {
+                str(page['pageid']): {
+                    'pageid': page['pageid'],
+                    'title': page['title'],
+                    'extract': page['extract'],
+                    'fullurl': page['url'],
+                    'categories': [{'title': f"Category:{c}"} for c in page['categories']],
+                    'links': [{'title': l} for l in page['links']]
+                }
+            }
+            return jsonify({'query': {'pages': page_data}})
+
+    if action == 'parse':
+        page_title = request.args.get('page', '')
+        if page_title in MOCK_WIKI_DATA['pages']:
+            page = MOCK_WIKI_DATA['pages'][page_title]
+            return jsonify({
+                'parse': {
+                    'title': page['title'],
+                    'sections': [{'line': s['title'], 'level': str(s['level'] + 1), 'index': str(i)}
+                                for i, s in enumerate(page['sections'])]
+                }
+            })
+
+    return jsonify({'error': 'Unknown action'}), 400
+
+
+@app.route('/mock/zhihu/api/columns/<slug>', methods=['GET'])
+def mock_zhihu_column(slug):
+    """模拟知乎专栏信息 API"""
+    if slug in MOCK_ZHIHU_DATA['columns']:
+        return jsonify(MOCK_ZHIHU_DATA['columns'][slug])
+    return jsonify({'error': 'Column not found'}), 404
+
+
+@app.route('/mock/zhihu/api/columns/<slug>/articles', methods=['GET'])
+def mock_zhihu_column_posts(slug):
+    """模拟知乎专栏文章列表 API"""
+    limit = int(request.args.get('limit', 20))
+    offset = int(request.args.get('offset', 0))
+
+    if slug in MOCK_ZHIHU_DATA['posts']:
+        posts = MOCK_ZHIHU_DATA['posts'][slug]
+        return jsonify({'data': posts[offset:offset + limit]})
+    return jsonify({'data': []})
+
+
+@app.route('/mock/zhihu/api/posts/<post_id>', methods=['GET'])
+def mock_zhihu_post(post_id):
+    """模拟知乎文章详情 API"""
+    if post_id in MOCK_ZHIHU_DATA['articles']:
+        return jsonify(MOCK_ZHIHU_DATA['articles'][post_id])
+    return jsonify({'error': 'Post not found'}), 404
+
+
+# ==================== 萌娘百科模拟 API ====================
+
+@app.route('/mock/moegirl/api.php', methods=['GET'])
+def mock_moegirl_api():
+    """模拟萌娘百科 MediaWiki API"""
+    action = request.args.get('action', '')
+
+    if action == 'query':
+        list_type = request.args.get('list', '')
+
+        if list_type == 'search':
+            query = request.args.get('srsearch', '')
+            results = []
+            for title, page in MOCK_MOEGIRL_DATA['pages'].items():
+                if query.lower() in title.lower() or query.lower() in page['extract'].lower():
+                    results.append({
+                        'title': title,
+                        'pageid': page['pageid'],
+                        'snippet': page['extract'][:100]
+                    })
+            return jsonify({'query': {'search': results}})
+
+        titles = request.args.get('titles', '')
+        if titles and titles in MOCK_MOEGIRL_DATA['pages']:
+            page = MOCK_MOEGIRL_DATA['pages'][titles]
+            return jsonify({'query': {'pages': {
+                str(page['pageid']): {
+                    'pageid': page['pageid'],
+                    'title': page['title'],
+                    'extract': page['extract'],
+                    'fullurl': page['url'],
+                    'categories': [{'title': c} for c in page['categories']]
+                }
+            }}})
+
+    return jsonify({'error': 'Unknown action'}), 400
+
+
+# ==================== 哔哩哔哩模拟 API ====================
+
+@app.route('/mock/bilibili/x/web-interface/view', methods=['GET'])
+def mock_bilibili_video():
+    """模拟B站视频信息 API"""
+    bvid = request.args.get('bvid', '')
+    if bvid in MOCK_BILIBILI_DATA['videos']:
+        return jsonify({'code': 0, 'data': MOCK_BILIBILI_DATA['videos'][bvid]})
+    return jsonify({'code': -404, 'message': 'Video not found'})
+
+@app.route('/mock/bilibili/x/web-interface/search/type', methods=['GET'])
+def mock_bilibili_search():
+    """模拟B站搜索 API"""
+    keyword = request.args.get('keyword', '')
+    results = []
+    for bvid, video in MOCK_BILIBILI_DATA['videos'].items():
+        if keyword.lower() in video['title'].lower():
+            results.append({
+                'bvid': bvid,
+                'title': video['title'],
+                'author': video['owner']['name'],
+                'play': video['stat']['view'],
+                'description': video['desc']
+            })
+    return jsonify({'code': 0, 'data': {'result': results}})
+
+@app.route('/mock/bilibili/x/space/acc/info', methods=['GET'])
+def mock_bilibili_user():
+    """模拟B站用户信息 API"""
+    mid = request.args.get('mid', '')
+    if mid in MOCK_BILIBILI_DATA['users']:
+        return jsonify({'code': 0, 'data': MOCK_BILIBILI_DATA['users'][mid]})
+    return jsonify({'code': -404, 'message': 'User not found'})
+
+
+# ==================== GitHub 模拟 API ====================
+
+@app.route('/mock/github/repos/<owner>/<repo>', methods=['GET'])
+def mock_github_repo(owner, repo):
+    """模拟 GitHub 仓库 API"""
+    key = f'{owner}/{repo}'
+    if key in MOCK_GITHUB_DATA['repos']:
+        return jsonify(MOCK_GITHUB_DATA['repos'][key])
+    return jsonify({'message': 'Not Found'}), 404
+
+@app.route('/mock/github/repos/<owner>/<repo>/readme', methods=['GET'])
+def mock_github_readme(owner, repo):
+    """模拟 GitHub README API"""
+    key = f'{owner}/{repo}'
+    if key in MOCK_GITHUB_DATA['readmes']:
+        readme = MOCK_GITHUB_DATA['readmes'][key]
+        import base64
+        return jsonify({
+            'name': readme['name'],
+            'path': readme['path'],
+            'content': base64.b64encode(readme['content'].encode()).decode(),
+            'html_url': readme['html_url']
+        })
+    return jsonify({'message': 'Not Found'}), 404
+
+@app.route('/mock/github/search/repositories', methods=['GET'])
+def mock_github_search():
+    """模拟 GitHub 搜索 API"""
+    query = request.args.get('q', '')
+    items = []
+    for key, repo in MOCK_GITHUB_DATA['repos'].items():
+        if query.lower() in repo['name'].lower() or query.lower() in (repo['description'] or '').lower():
+            items.append(repo)
+    return jsonify({'items': items})
+
+
+# ==================== 微博模拟 API ====================
+
+@app.route('/mock/weibo/api/container/getIndex', methods=['GET'])
+def mock_weibo_container():
+    """模拟微博容器 API"""
+    uid = request.args.get('value', '')
+    containerid = request.args.get('containerid', '')
+
+    if uid in MOCK_WEIBO_DATA['users']:
+        if containerid and containerid.startswith('107603'):
+            # 返回微博列表
+            weibos = MOCK_WEIBO_DATA['weibos'].get(uid, [])
+            cards = [{'card_type': 9, 'mblog': w} for w in weibos]
+            return jsonify({'ok': 1, 'data': {'cards': cards}})
+        else:
+            # 返回用户信息
+            return jsonify({'ok': 1, 'data': {'userInfo': MOCK_WEIBO_DATA['users'][uid]}})
+
+    return jsonify({'ok': 0, 'message': 'User not found'})
+
+
+# ==================== YouTube 模拟 API ====================
+
+@app.route('/mock/youtube/videos', methods=['GET'])
+def mock_youtube_video():
+    """模拟 YouTube 视频 API"""
+    video_id = request.args.get('id', '')
+    if video_id in MOCK_YOUTUBE_DATA['videos']:
+        video = MOCK_YOUTUBE_DATA['videos'][video_id]
+        return jsonify({'items': [{
+            'id': video_id,
+            'snippet': {
+                'title': video['title'],
+                'description': video['description'],
+                'channelTitle': video['channel_title'],
+                'channelId': video['channel_id'],
+                'publishedAt': video['published_at'],
+                'tags': video.get('tags', [])
+            },
+            'statistics': {
+                'viewCount': str(video['view_count']),
+                'likeCount': str(video['like_count']),
+                'commentCount': str(video['comment_count'])
+            },
+            'contentDetails': {'duration': video['duration']}
+        }]})
+    return jsonify({'items': []})
+
+
+@app.route('/mock/youtube/search', methods=['GET'])
+def mock_youtube_search():
+    """模拟 YouTube 搜索 API"""
+    query = request.args.get('q', '').lower()
+    results = []
+    for vid, video in MOCK_YOUTUBE_DATA['videos'].items():
+        if query in video['title'].lower() or query in video['description'].lower():
+            results.append({
+                'id': {'videoId': vid},
+                'snippet': {
+                    'title': video['title'],
+                    'description': video['description'],
+                    'channelTitle': video['channel_title'],
+                    'publishedAt': video['published_at'],
+                    'thumbnails': {'high': {'url': 'https://example.com/thumb.jpg'}}
+                }
+            })
+    return jsonify({'items': results})
+
+
+@app.route('/mock/youtube/channels', methods=['GET'])
+def mock_youtube_channel():
+    """模拟 YouTube 频道 API"""
+    channel_id = request.args.get('id', '')
+    if channel_id in MOCK_YOUTUBE_DATA['channels']:
+        channel = MOCK_YOUTUBE_DATA['channels'][channel_id]
+        return jsonify({'items': [{
+            'snippet': {
+                'title': channel['title'],
+                'description': channel['description'],
+                'customUrl': channel['custom_url'],
+                'thumbnails': {'high': {'url': channel['thumbnail']}}
+            },
+            'statistics': {
+                'subscriberCount': str(channel['subscriber_count']),
+                'videoCount': str(channel['video_count']),
+                'viewCount': str(channel['view_count'])
+            }
+        }]})
+    return jsonify({'items': []})
+
+
+# ==================== 贴吧模拟 API ====================
+
+@app.route('/mock/tieba/f', methods=['GET'])
+def mock_tieba_forum():
+    """模拟贴吧论坛页面"""
+    kw = request.args.get('kw', '')
+    if kw in MOCK_TIEBA_DATA['forums']:
+        forum = MOCK_TIEBA_DATA['forums'][kw]
+        posts = MOCK_TIEBA_DATA['posts'].get(kw, [])
+        # 返回模拟的HTML
+        html = f'''
+        <html><body>
+        <a class="card_title_fname">{forum['title']}</a>
+        <span class="card_menNum">{forum['member_count']}</span>
+        <span class="card_infoNum">{forum['post_count']}</span>
+        <ul>
+        '''
+        for post in posts:
+            html += f'''
+            <li class="j_thread_list">
+                <a class="j_th_tit" href="{post['url']}">{post['title']}</a>
+                <span class="tb_icon_author">{post['author']}</span>
+                <span class="threadlist_rep_num">{post['reply_count']}</span>
+            </li>
+            '''
+        html += '</ul></body></html>'
+        return html
+    return '<html><body>贴吧不存在</body></html>', 404
+
+
+@app.route('/mock/tieba/p/<post_id>', methods=['GET'])
+def mock_tieba_post(post_id):
+    """模拟贴吧帖子详情页面"""
+    if post_id in MOCK_TIEBA_DATA['post_details']:
+        post = MOCK_TIEBA_DATA['post_details'][post_id]
+        html = f'''
+        <html><body>
+        <h1 class="core_title_txt">{post['title']}</h1>
+        <div class="d_post_content">{post['content']}</div>
+        <a class="p_author_name">{post['author']}</a>
+        </body></html>
+        '''
+        return html
+    return '<html><body>帖子不存在</body></html>', 404
+
+
+# ==================== arXiv 模拟 API ====================
+
+@app.route('/mock/arxiv/api/query', methods=['GET'])
+def mock_arxiv_api():
+    """模拟 arXiv API"""
+    search_query = request.args.get('search_query', '')
+    id_list = request.args.get('id_list', '')
+
+    # 按 ID 查询
+    if id_list:
+        if id_list in MOCK_ARXIV_DATA['papers']:
+            paper = MOCK_ARXIV_DATA['papers'][id_list]
+            xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+                <entry>
+                    <id>http://arxiv.org/abs/{paper['arxiv_id']}</id>
+                    <title>{paper['title']}</title>
+                    <summary>{paper['summary']}</summary>
+                    <published>{paper['published']}</published>
+                    <updated>{paper['updated']}</updated>
+                    {''.join(f'<author><name>{a}</name></author>' for a in paper['authors'])}
+                    {''.join(f'<category term="{c}"/>' for c in paper['categories'])}
+                    <link title="pdf" href="{paper['pdf_url']}"/>
+                </entry>
+            </feed>'''
+            return xml, 200, {'Content-Type': 'application/xml'}
+        return '<?xml version="1.0"?><feed></feed>', 200, {'Content-Type': 'application/xml'}
+
+    # 搜索查询
+    if search_query:
+        query = search_query.replace('all:', '').replace('cat:', '').lower()
+        results = []
+
+        # 搜索所有论文
+        for paper_id, paper in MOCK_ARXIV_DATA['papers'].items():
+            if query in paper['title'].lower() or query in paper['summary'].lower():
+                results.append(paper)
+
+        # 检查分类搜索
+        if 'cat:' in search_query:
+            cat = search_query.split('cat:')[1].split()[0] if 'cat:' in search_query else ''
+            if cat in MOCK_ARXIV_DATA['recent']:
+                for p in MOCK_ARXIV_DATA['recent'][cat]:
+                    results.append({
+                        'arxiv_id': p['arxiv_id'],
+                        'title': p['title'],
+                        'summary': '',
+                        'authors': p['authors'],
+                        'categories': [cat],
+                        'published': p['published'],
+                        'updated': p['published'],
+                        'pdf_url': f"https://arxiv.org/pdf/{p['arxiv_id']}"
+                    })
+
+        entries = ''
+        for paper in results:
+            entries += f'''
+                <entry>
+                    <id>http://arxiv.org/abs/{paper['arxiv_id']}</id>
+                    <title>{paper['title']}</title>
+                    <summary>{paper.get('summary', '')}</summary>
+                    <published>{paper['published']}</published>
+                    <updated>{paper.get('updated', paper['published'])}</updated>
+                    {''.join(f'<author><name>{a}</name></author>' for a in paper['authors'])}
+                    {''.join(f'<category term="{c}"/>' for c in paper.get('categories', []))}
+                    <link title="pdf" href="{paper.get('pdf_url', '')}"/>
+                </entry>
+            '''
+        xml = f'<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom">{entries}</feed>'
+        return xml, 200, {'Content-Type': 'application/xml'}
+
+
+# ==================== 测试路由 (新增平台) ====================
+
+@app.route('/api/test/moegirl/search', methods=['GET'])
+def test_moegirl_search():
+    """测试萌娘百科搜索"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_moegirl_crawler(test_mode=True)
+        results = crawler.search(query)
+        return jsonify({'mode': 'test', 'query': query, 'results': results, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test/bilibili/video', methods=['GET'])
+def test_bilibili_video():
+    """测试B站视频"""
+    bvid = request.args.get('bvid', '')
+    if not bvid:
+        return jsonify({'error': '请提供 BVID'}), 400
+    try:
+        crawler = get_bilibili_crawler(test_mode=True)
+        video = crawler.get_video_info(bvid)
+        if not video:
+            return jsonify({'error': f'视频不存在: {bvid}'}), 404
+        video['mode'] = 'test'
+        return jsonify(video)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test/github/repo', methods=['GET'])
+def test_github_repo():
+    """测试 GitHub 仓库"""
+    owner = request.args.get('owner', '')
+    repo = request.args.get('repo', '')
+    if not owner or not repo:
+        return jsonify({'error': '请提供 owner 和 repo'}), 400
+    try:
+        crawler = get_github_crawler(test_mode=True)
+        repo_info = crawler.get_repo(owner, repo)
+        if not repo_info:
+            return jsonify({'error': f'仓库不存在'}), 404
+        repo_info['mode'] = 'test'
+        return jsonify(repo_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test/weibo/user', methods=['GET'])
+def test_weibo_user():
+    """测试微博用户"""
+    uid = request.args.get('uid', '')
+    if not uid:
+        return jsonify({'error': '请提供 UID'}), 400
+    try:
+        crawler = get_weibo_crawler(test_mode=True)
+        user = crawler.get_user_info(uid)
+        if not user:
+            return jsonify({'error': f'用户不存在'}), 404
+        user['mode'] = 'test'
+        return jsonify(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/youtube/video', methods=['GET'])
+def test_youtube_video():
+    """测试 YouTube 视频"""
+    video_id = request.args.get('id', '')
+    if not video_id:
+        return jsonify({'error': '请提供视频 ID'}), 400
+    try:
+        crawler = get_youtube_crawler(test_mode=True)
+        video = crawler.get_video_info(video_id)
+        if not video:
+            return jsonify({'error': f'视频不存在'}), 404
+        video['mode'] = 'test'
+        return jsonify(video)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/tieba/forum', methods=['GET'])
+def test_tieba_forum():
+    """测试贴吧信息"""
+    name = request.args.get('name', '')
+    if not name:
+        return jsonify({'error': '请提供贴吧名称'}), 400
+    try:
+        crawler = get_tieba_crawler(test_mode=True)
+        forum = crawler.get_forum_info(name)
+        if not forum:
+            return jsonify({'error': f'贴吧不存在'}), 404
+        forum['mode'] = 'test'
+        return jsonify(forum)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/arxiv/search', methods=['GET'])
+def test_arxiv_search():
+    """测试 arXiv 搜索"""
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': '请提供搜索关键词'}), 400
+    try:
+        crawler = get_arxiv_crawler(test_mode=True)
+        papers = crawler.search_papers(query)
+        return jsonify({'mode': 'test', 'query': query, 'papers': papers, 'count': len(papers)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/test/hub/crawl', methods=['POST'])
+def test_hub_crawl():
+    """测试爬虫中台爬取"""
+    if not request.json:
+        return jsonify({'error': '请提供请求数据'}), 400
+
+    platform = request.json.get('platform', '')
+    method = request.json.get('method', '')
+    args = request.json.get('args', [])
+    kwargs = request.json.get('kwargs', {})
+
+    if not platform or not method:
+        return jsonify({'error': '请提供 platform 和 method'}), 400
+
+    try:
+        hub = get_crawler_hub(test_mode=True)
+        result = hub.crawl(platform, method, *args, **kwargs)
+        return jsonify({
+            'mode': 'test',
+            'platform': platform,
+            'method': method,
+            'result': result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     # 获取端口，默认为5000
