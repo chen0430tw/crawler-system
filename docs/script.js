@@ -4571,65 +4571,13 @@ function sanitizeHtml(html) {
     return tempDiv.innerHTML;
 }
 
-// 29. 为API客户端添加维基百科相关接口
+// 29. 为API客户端添加维基百科相关接口（仅添加 api_client.js 中没有的方法）
 if (window.ApiClient) {
-    // 搜索维基百科
-    ApiClient.searchWiki = async function(query, options = {}) {
-        try {
-            const params = new URLSearchParams({
-                query: query,
-                language: options.language || 'zh',
-                limit: options.limit || 10
-            });
-            
-            const response = await fetch(`${API_BASE_URL}/wiki/search?${params.toString()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '搜索失败');
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('搜索维基百科出错:', error);
-            throw error;
-        }
-    };
-    
-    // 获取随机维基百科页面
-    ApiClient.getRandomWikiPages = async function(options = {}) {
-        try {
-            const params = new URLSearchParams({
-                count: options.count || 5,
-                language: options.language || 'zh'
-            });
-            
-            const response = await fetch(`${API_BASE_URL}/wiki/random?${params.toString()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '获取随机页面失败');
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('获取随机维基百科页面出错:', error);
-            throw error;
-        }
-    };
-    
-    // 提交维基百科爬取任务
-    ApiClient.submitWikiTask = async function(config) {
+    // 注意：searchWiki, getRandomWikiPages, submitWikiTask, cancelWikiTask
+    // 已在 api_client.js 中正确定义，不要在这里重复定义
+
+    // 提交维基百科爬取任务（如果 api_client.js 中没有定义）
+    if (!ApiClient.submitWikiTask) ApiClient.submitWikiTask = async function(config) {
         try {
             const response = await fetch(`${API_BASE_URL}/wiki/submit`, {
                 method: 'POST',
