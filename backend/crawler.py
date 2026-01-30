@@ -123,15 +123,17 @@ except ImportError:
 
 class WebCrawler:
     """网页爬虫类，负责下载和解析网页"""
-    
-    def __init__(self, max_workers=3, max_retries=3, timeout=30):
+
+    def __init__(self, max_workers=3, max_retries=3, timeout=30, use_browser=False, proxy=None):
         """
         初始化爬虫
-        
+
         参数:
             max_workers: 最大并发数
             max_retries: 最大重试次数
             timeout: 请求超时时间(秒)
+            use_browser: 是否使用浏览器模式 (Playwright) 处理 JS 渲染的页面
+            proxy: 代理服务器地址 (如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080)
         """
         self.max_workers = max_workers
         self.max_retries = max_retries
@@ -139,7 +141,35 @@ class WebCrawler:
         self.session = requests.Session()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.visited_urls = set()
-        
+
+        # 代理设置
+        self.proxy = proxy
+        if proxy:
+            self.session.proxies = {
+                'http': proxy,
+                'https': proxy
+            }
+            logger.info(f"已启用代理: {proxy}")
+
+        # 浏览器模式 (Playwright)
+        self.use_browser = use_browser
+        self._playwright = None
+        self._browser = None
+        self._browser_context = None
+
+        # 需要浏览器渲染的网站特征
+        self.js_required_patterns = [
+            '请使用现代浏览器',
+            'Please enable JavaScript',
+            'JavaScript is required',
+            'enable javascript',
+            'needs JavaScript',
+            'requires JavaScript',
+            '<noscript>',
+            'cf-browser-verification',  # Cloudflare
+            'challenge-platform',  # Cloudflare challenge
+        ]
+
         # 设置随机用户代理
         self.user_agents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -147,7 +177,109 @@ class WebCrawler:
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
         ]
-        
+
+    def _init_browser(self):
+        """初始化 Playwright 浏览器"""
+        if self._browser is not None:
+            return True
+
+        try:
+            from playwright.sync_api import sync_playwright
+            self._playwright = sync_playwright().start()
+            self._browser = self._playwright.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-dev-shm-usage',
+                    '--no-sandbox',
+                ]
+            )
+
+            # 配置 Playwright 的代理
+            context_options = {
+                'user_agent': self._get_random_user_agent(),
+                'viewport': {'width': 1920, 'height': 1080},
+                'locale': 'zh-CN',
+            }
+            if self.proxy:
+                context_options['proxy'] = {'server': self.proxy}
+                logger.info(f"Playwright 使用代理: {self.proxy}")
+
+            self._browser_context = self._browser.new_context(**context_options)
+            logger.info("Playwright 浏览器初始化成功")
+            return True
+        except ImportError:
+            logger.warning("Playwright 未安装，无法使用浏览器模式。运行: pip install playwright && playwright install chromium")
+            return False
+        except Exception as e:
+            logger.error(f"初始化 Playwright 浏览器失败: {str(e)}")
+            return False
+
+    def _close_browser(self):
+        """关闭 Playwright 浏览器"""
+        try:
+            if self._browser_context:
+                self._browser_context.close()
+            if self._browser:
+                self._browser.close()
+            if self._playwright:
+                self._playwright.stop()
+            self._browser_context = None
+            self._browser = None
+            self._playwright = None
+            logger.info("Playwright 浏览器已关闭")
+        except Exception as e:
+            logger.error(f"关闭 Playwright 浏览器时出错: {str(e)}")
+
+    def _needs_browser(self, html_content):
+        """检测页面是否需要浏览器渲染"""
+        if not html_content:
+            return False
+        for pattern in self.js_required_patterns:
+            if pattern.lower() in html_content.lower():
+                logger.info(f"检测到需要 JavaScript 渲染的特征: {pattern}")
+                return True
+        return False
+
+    def _download_with_browser(self, url):
+        """使用 Playwright 浏览器下载页面"""
+        if not self._init_browser():
+            return None, 0
+
+        try:
+            page = self._browser_context.new_page()
+
+            # 设置超时
+            page.set_default_timeout(self.timeout * 1000)
+
+            # 访问页面
+            response = page.goto(url, wait_until='networkidle')
+
+            if response is None:
+                page.close()
+                return None, 0
+
+            status_code = response.status
+
+            if status_code == 200:
+                # 等待页面完全加载
+                page.wait_for_load_state('domcontentloaded')
+                time.sleep(1)  # 额外等待 JS 执行
+
+                # 获取渲染后的 HTML
+                html_content = page.content()
+                page.close()
+
+                logger.info(f"Playwright 成功获取页面: {url}, 内容长度: {len(html_content)}")
+                return html_content, status_code
+            else:
+                page.close()
+                return None, status_code
+
+        except Exception as e:
+            logger.error(f"Playwright 下载页面失败: {url}, 错误: {str(e)}")
+            return None, 0
+
     def _get_random_user_agent(self):
         """获取随机用户代理，模拟现代浏览器"""
         modern_user_agents = [
@@ -243,8 +375,19 @@ class WebCrawler:
                             except Exception as e:
                                 logger.error(f"使用response.text获取内容失败: {str(e)}")
                     
+                    # 检测是否需要浏览器渲染（JS 渲染页面）
+                    if self._needs_browser(html_content):
+                        logger.info(f"页面需要 JavaScript 渲染，尝试使用 Playwright: {url}")
+                        if self.use_browser:
+                            browser_content, browser_status = self._download_with_browser(url)
+                            if browser_content:
+                                return browser_content, browser_status
+                            logger.warning(f"Playwright 下载失败，返回原始内容: {url}")
+                        else:
+                            logger.warning(f"检测到 JS 渲染页面但未启用浏览器模式，返回原始内容: {url}")
+
                     return html_content, status_code
-                    
+
                 elif 'application/pdf' in content_type:
                     # 标记为PDF并返回内容
                     logger.info(f"检测到PDF文件: {url}")

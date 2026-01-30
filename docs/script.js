@@ -100,12 +100,16 @@ document.addEventListener('DOMContentLoaded', function() {
             const crawlDepth = document.getElementById('crawlDepth').value;
             const storageFormat = document.querySelector('input[name="storageFormat"]:checked').value;
             const concurrency = document.getElementById('concurrency').value;
-            
+            const proxyUrl = document.getElementById('proxyInput')?.value?.trim() || '';
+            const useBrowserMode = document.getElementById('useBrowserMode')?.checked || false;
+
             const config = {
                 urls: urlList,
                 depth: parseInt(crawlDepth),
                 format: storageFormat,
                 concurrency: parseInt(concurrency),
+                proxy: proxyUrl || null,
+                use_browser: useBrowserMode,
                 enable_urban_legend: true,
                 timestamp: new Date().toISOString()
             };
@@ -4286,6 +4290,16 @@ function generateWikiCategoryTree(rootCategory) {
             console.warn('销毁旧图表失败:', e);
         }
         window.wikiCategoryTreeChart = null;
+        window.wikiCategoryTreeOption = null;
+    }
+    if (window.wikiPagePathChart) {
+        try {
+            window.wikiPagePathChart.dispose();
+        } catch (e) {
+            // 忽略
+        }
+        window.wikiPagePathChart = null;
+        window.wikiPagePathOption = null;
     }
 
     // 清空容器
@@ -4500,23 +4514,27 @@ function generateWikiCategoryTree(rootCategory) {
 
             // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
             const chartInstance = myChart;
-            const chartOption = option;
             let currentZoom = 0.9;
 
+            // 使用 graphRoam action 进行缩放，保持当前视图中心
             zoomControls.querySelector('.tree-zoom-in').addEventListener('click', () => {
                 currentZoom = Math.min(currentZoom * 1.3, 5);
-                chartOption.series[0].zoom = currentZoom;
-                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({
+                    type: 'treeRoam',
+                    seriesIndex: 0,
+                    zoom: 1.3  // 相对缩放因子
+                });
             });
             zoomControls.querySelector('.tree-zoom-out').addEventListener('click', () => {
                 currentZoom = Math.max(currentZoom / 1.3, 0.2);
-                chartOption.series[0].zoom = currentZoom;
-                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({
+                    type: 'treeRoam',
+                    seriesIndex: 0,
+                    zoom: 1 / 1.3  // 相对缩放因子
+                });
             });
             zoomControls.querySelector('.tree-zoom-reset').addEventListener('click', () => {
                 currentZoom = 0.9;
-                chartOption.series[0].zoom = currentZoom;
-                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
                 chartInstance.dispatchAction({ type: 'restore' });
             });
 
@@ -4584,6 +4602,26 @@ function findWikiPagePath(sourcePage, targetPage) {
     // 获取可视化容器
     const container = document.getElementById('wiki-visualization-container');
     if (!container) return;
+
+    // 先销毁旧的图表实例，避免 removeChild 错误
+    if (window.wikiPagePathChart) {
+        try {
+            window.wikiPagePathChart.dispose();
+        } catch (e) {
+            // 忽略
+        }
+        window.wikiPagePathChart = null;
+        window.wikiPagePathOption = null;
+    }
+    if (window.wikiCategoryTreeChart) {
+        try {
+            window.wikiCategoryTreeChart.dispose();
+        } catch (e) {
+            // 忽略
+        }
+        window.wikiCategoryTreeChart = null;
+        window.wikiCategoryTreeOption = null;
+    }
 
     // 获取选中的语言
     const language = document.getElementById('wiki-language-selector').value || 'zh';
@@ -4813,23 +4851,27 @@ function findWikiPagePath(sourcePage, targetPage) {
 
             // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
             const chartInstance = myChart;
-            const chartOption = option;
             let currentZoom = 1.2;
 
+            // 使用 graphRoam action 进行缩放，保持当前视图中心
             zoomControls.querySelector('.path-zoom-in').addEventListener('click', () => {
                 currentZoom = Math.min(currentZoom * 1.3, 5);
-                chartOption.series[0].zoom = currentZoom;
-                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({
+                    type: 'graphRoam',
+                    seriesIndex: 0,
+                    zoom: 1.3  // 相对缩放因子
+                });
             });
             zoomControls.querySelector('.path-zoom-out').addEventListener('click', () => {
                 currentZoom = Math.max(currentZoom / 1.3, 0.3);
-                chartOption.series[0].zoom = currentZoom;
-                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({
+                    type: 'graphRoam',
+                    seriesIndex: 0,
+                    zoom: 1 / 1.3  // 相对缩放因子
+                });
             });
             zoomControls.querySelector('.path-zoom-reset').addEventListener('click', () => {
                 currentZoom = 1.2;
-                chartOption.series[0].zoom = currentZoom;
-                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
                 chartInstance.dispatchAction({ type: 'restore' });
             });
 
