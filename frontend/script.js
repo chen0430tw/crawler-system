@@ -4431,22 +4431,32 @@ function generateWikiCategoryTree(rootCategory) {
                 },
                 tooltip: {
                     formatter: function(params) {
-                        return `<div>${params.data.name}</div>`;
+                        return `<div style="max-width:200px;word-wrap:break-word;">${params.data.name}</div>`;
                     }
+                },
+                toolbox: {
+                    show: true,
+                    feature: {
+                        restore: { title: '还原' },
+                        saveAsImage: { title: '保存图片' }
+                    },
+                    right: 20,
+                    top: 20
                 },
                 series: [{
                     type: 'tree',
                     data: [treeDataForECharts],
-                    top: '10%',
-                    left: '8%',
-                    bottom: '22%',
-                    right: '20%',
-                    symbolSize: 7,
+                    top: '12%',
+                    left: '10%',
+                    bottom: '14%',
+                    right: '25%',
+                    symbolSize: 10,
                     label: {
                         position: 'left',
                         verticalAlign: 'middle',
                         align: 'right',
-                        fontSize: 12
+                        fontSize: 13,
+                        color: '#333'
                     },
                     leaves: {
                         label: {
@@ -4458,7 +4468,9 @@ function generateWikiCategoryTree(rootCategory) {
                     initialTreeDepth: 2,
                     expandAndCollapse: true,
                     animationDuration: 550,
-                    animationDurationUpdate: 750
+                    animationDurationUpdate: 750,
+                    roam: true,  // 启用鼠标缩放和拖拽
+                    zoom: 0.9
                 }]
             };
             
@@ -4466,6 +4478,38 @@ function generateWikiCategoryTree(rootCategory) {
 
             // 保存图表实例
             window.wikiCategoryTreeChart = myChart;
+
+            // 添加缩放按钮
+            const zoomControls = document.createElement('div');
+            zoomControls.className = 'chart-zoom-controls';
+            zoomControls.style.cssText = 'position:absolute;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:5px;';
+            zoomControls.innerHTML = `
+                <button class="btn btn-sm btn-outline-secondary" id="tree-zoom-in" title="放大">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="tree-zoom-reset" title="重置">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="tree-zoom-out" title="缩小">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+            `;
+            container.style.position = 'relative';
+            container.appendChild(zoomControls);
+
+            let currentZoom = 0.9;
+            document.getElementById('tree-zoom-in')?.addEventListener('click', () => {
+                currentZoom = Math.min(currentZoom * 1.3, 5);
+                myChart.setOption({ series: [{ zoom: currentZoom }] });
+            });
+            document.getElementById('tree-zoom-out')?.addEventListener('click', () => {
+                currentZoom = Math.max(currentZoom / 1.3, 0.2);
+                myChart.setOption({ series: [{ zoom: currentZoom }] });
+            });
+            document.getElementById('tree-zoom-reset')?.addEventListener('click', () => {
+                currentZoom = 0.9;
+                myChart.setOption({ series: [{ zoom: currentZoom, center: null }] });
+            });
 
             // 添加窗口大小变化时的自适应调整
             window.addEventListener('resize', function() {
@@ -4669,19 +4713,28 @@ function findWikiPagePath(sourcePage, targetPage) {
             const option = {
                 title: {
                     text: `维基百科页面路径: ${pathArray[0]} → ${pathArray[pathArray.length - 1]}`,
-                    subtext: `路径长度: ${pathArray.length - 1} 步 ${statsText}`,
+                    subtext: `路径长度: ${pathArray.length - 1} 步 ${statsText}\n提示: 鼠标滚轮缩放，拖拽移动`,
                     left: 'center'
                 },
                 tooltip: {
                     formatter: function(params) {
-                        return `<div>${params.data.name}</div>`;
+                        return `<div style="max-width:200px;word-wrap:break-word;">${params.data.name}</div>`;
                     }
+                },
+                toolbox: {
+                    show: true,
+                    feature: {
+                        restore: { title: '还原' },
+                        saveAsImage: { title: '保存图片' }
+                    },
+                    right: 20,
+                    top: 60
                 },
                 legend: {
                     data: ['起点', '终点', '中间节点'],
                     orient: 'vertical',
                     right: 10,
-                    top: 20
+                    top: 100
                 },
                 series: [{
                     name: '页面路径',
@@ -4691,10 +4744,12 @@ function findWikiPagePath(sourcePage, targetPage) {
                         id: node.id,
                         name: node.name,
                         value: node.value,
-                        symbolSize: node.value === 2 ? 20 : 15,
+                        symbolSize: node.value === 2 ? 40 : 30,
                         category: node.category,
                         label: {
-                            show: true
+                            show: true,
+                            fontSize: 14,
+                            fontWeight: node.value === 2 ? 'bold' : 'normal'
                         }
                     })),
                     links: links,
@@ -4704,31 +4759,68 @@ function findWikiPagePath(sourcePage, targetPage) {
                         { name: '中间节点' }
                     ],
                     roam: true,
+                    zoom: 1.2,
                     force: {
-                        repulsion: 100,
-                        edgeLength: 100
+                        repulsion: 200,
+                        edgeLength: 150
                     },
                     lineStyle: {
                         color: 'source',
-                        curveness: 0.3
+                        curveness: 0.3,
+                        width: 3
                     },
                     emphasis: {
                         focus: 'adjacency',
                         lineStyle: {
-                            width: 4
+                            width: 5
                         }
                     }
                 }]
             };
             
             myChart.setOption(option);
-            
+
             // 保存图表实例
             window.wikiPagePathChart = myChart;
-            
+
+            // 添加缩放按钮
+            const zoomControls = document.createElement('div');
+            zoomControls.className = 'chart-zoom-controls';
+            zoomControls.style.cssText = 'position:absolute;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:5px;';
+            zoomControls.innerHTML = `
+                <button class="btn btn-sm btn-outline-secondary" id="path-zoom-in" title="放大">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="path-zoom-reset" title="重置">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="path-zoom-out" title="缩小">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+            `;
+            container.style.position = 'relative';
+            container.appendChild(zoomControls);
+
+            let currentZoom = 1.2;
+            document.getElementById('path-zoom-in')?.addEventListener('click', () => {
+                currentZoom = Math.min(currentZoom * 1.3, 5);
+                myChart.setOption({ series: [{ zoom: currentZoom }] });
+            });
+            document.getElementById('path-zoom-out')?.addEventListener('click', () => {
+                currentZoom = Math.max(currentZoom / 1.3, 0.3);
+                myChart.setOption({ series: [{ zoom: currentZoom }] });
+            });
+            document.getElementById('path-zoom-reset')?.addEventListener('click', () => {
+                currentZoom = 1.2;
+                myChart.setOption({ series: [{ zoom: currentZoom }] });
+                myChart.dispatchAction({ type: 'restore' });
+            });
+
             // 添加窗口大小变化时的自适应调整
             window.addEventListener('resize', function() {
-                myChart.resize();
+                if (myChart && !myChart.isDisposed()) {
+                    myChart.resize();
+                }
             });
         } else {
             // 备用方案：显示简单的路径
