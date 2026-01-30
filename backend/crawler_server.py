@@ -713,6 +713,12 @@ def wiki_get_category_tree():
         api_url = f"https://{language}.wikipedia.org/w/api.php"
         logger.info(f"开始获取分类树: category={category_name}, lang={language}, depth={depth}")
 
+        # Wikipedia API 要求必须有 User-Agent
+        headers = {
+            'User-Agent': 'CrawlerSystem/1.0 (Educational Project; https://github.com/crawler-system)',
+            'Accept': 'application/json'
+        }
+
         # 递归构建分类树
         def build_tree(cat_name, current_depth, max_children=15):
             node = {
@@ -737,7 +743,7 @@ def wiki_get_category_tree():
             }
 
             try:
-                response = req.get(api_url, params=subcat_params, timeout=15)
+                response = req.get(api_url, params=subcat_params, headers=headers, timeout=15)
                 response.raise_for_status()
                 data = response.json()
 
@@ -774,7 +780,7 @@ def wiki_get_category_tree():
                 }
 
                 try:
-                    response = req.get(api_url, params=page_params, timeout=15)
+                    response = req.get(api_url, params=page_params, headers=headers, timeout=15)
                     data = response.json()
 
                     if 'query' in data and 'categorymembers' in data['query']:
@@ -823,6 +829,12 @@ def wiki_find_path():
     try:
         api_url = f"https://{language}.wikipedia.org/w/api.php"
 
+        # Wikipedia API 要求必须有 User-Agent
+        headers = {
+            'User-Agent': 'CrawlerSystem/1.0 (Educational Project; https://github.com/crawler-system)',
+            'Accept': 'application/json'
+        }
+
         # 使用 BFS 查找路径
         from collections import deque
 
@@ -847,7 +859,7 @@ def wiki_find_path():
             }
 
             try:
-                response = req.get(api_url, params=params, timeout=10)
+                response = req.get(api_url, params=params, headers=headers, timeout=10)
                 result = response.json()
 
                 pages = result.get('query', {}).get('pages', {})
@@ -1310,6 +1322,12 @@ def wiki_get_infobox():
     try:
         api_url = f"https://{language}.wikipedia.org/w/api.php"
 
+        # Wikipedia API 要求必须有 User-Agent
+        headers = {
+            'User-Agent': 'CrawlerSystem/1.0 (Educational Project; https://github.com/crawler-system)',
+            'Accept': 'application/json'
+        }
+
         # 获取页面 HTML 以提取 infobox
         params = {
             'action': 'parse',
@@ -1318,7 +1336,7 @@ def wiki_get_infobox():
             'format': 'json'
         }
 
-        response = req.get(api_url, params=params, timeout=15)
+        response = req.get(api_url, params=params, headers=headers, timeout=15)
         data = response.json()
 
         if 'error' in data:
