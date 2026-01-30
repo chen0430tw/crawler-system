@@ -4317,6 +4317,15 @@ function generateWikiCategoryTree(rootCategory) {
     function renderCategoryTree(treeData, container) {
         // 如果有ECharts库
         if (typeof echarts !== 'undefined') {
+            // 先销毁旧的图表实例
+            if (window.wikiCategoryTreeChart) {
+                window.wikiCategoryTreeChart.dispose();
+                window.wikiCategoryTreeChart = null;
+            }
+
+            // 确保容器有足够高度
+            container.style.height = '500px';
+
             // 使用ECharts渲染树形图
             const myChart = echarts.init(container);
             

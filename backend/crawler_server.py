@@ -713,7 +713,7 @@ def wiki_get_category_tree():
         api_url = f"https://{language}.wikipedia.org/w/api.php"
 
         # 递归构建分类树
-        def build_tree(cat_name, current_depth):
+        def build_tree(cat_name, current_depth, max_children=15):
             node = {
                 'name': cat_name,
                 'type': 'category',
@@ -724,32 +724,61 @@ def wiki_get_category_tree():
             if current_depth <= 0:
                 return node
 
-            # 获取分类成员
-            params = {
+            # 获取分类成员 - 使用 cmtype 分别获取子分类和页面
+            # 先获取子分类
+            subcat_params = {
                 'action': 'query',
                 'list': 'categorymembers',
                 'cmtitle': f'Category:{cat_name}',
-                'cmlimit': 50,
+                'cmtype': 'subcat',  # 只获取子分类
+                'cmlimit': max_children,
                 'format': 'json'
             }
 
             try:
-                response = req.get(api_url, params=params, timeout=15)
+                response = req.get(api_url, params=subcat_params, timeout=15)
                 data = response.json()
+
+                logger.info(f"分类 '{cat_name}' API 响应: {len(data.get('query', {}).get('categorymembers', []))} 个子分类")
 
                 if 'query' in data and 'categorymembers' in data['query']:
                     for member in data['query']['categorymembers']:
-                        if member['ns'] == 14:  # 子分类 (namespace 14)
-                            subcat_name = member['title'].replace('Category:', '')
-                            child_node = build_tree(subcat_name, current_depth - 1)
-                            node['children'].append(child_node)
-                        elif member['ns'] == 0 and include_pages:  # 普通页面
+                        # 移除 Category: 或 分类: 前缀
+                        subcat_name = member['title']
+                        for prefix in ['Category:', '分类:', 'category:']:
+                            if subcat_name.startswith(prefix):
+                                subcat_name = subcat_name[len(prefix):]
+                                break
+
+                        child_node = build_tree(subcat_name, current_depth - 1, max_children)
+                        node['children'].append(child_node)
+
+            except Exception as e:
+                logger.warning(f"获取分类 {cat_name} 子分类失败: {str(e)}")
+
+            # 如果需要包含页面
+            if include_pages:
+                page_params = {
+                    'action': 'query',
+                    'list': 'categorymembers',
+                    'cmtitle': f'Category:{cat_name}',
+                    'cmtype': 'page',  # 只获取页面
+                    'cmlimit': 20,
+                    'format': 'json'
+                }
+
+                try:
+                    response = req.get(api_url, params=page_params, timeout=15)
+                    data = response.json()
+
+                    if 'query' in data and 'categorymembers' in data['query']:
+                        for member in data['query']['categorymembers']:
                             node['pages'].append({
                                 'title': member['title'],
                                 'pageid': member['pageid']
                             })
-            except Exception as e:
-                logger.warning(f"获取分类 {cat_name} 成员失败: {str(e)}")
+                except Exception as e:
+                    logger.warning(f"获取分类 {cat_name} 页面失败: {str(e)}")
 
             return node
 
