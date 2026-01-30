@@ -712,6 +712,17 @@ def wiki_get_category_tree():
     try:
         api_url = f"https://{language}.wikipedia.org/w/api.php"
 
+        # 先测试 API 是否可访问
+        try:
+            test_response = req.get(api_url, params={'action': 'query', 'meta': 'siteinfo', 'format': 'json'}, timeout=10)
+            test_response.raise_for_status()
+        except Exception as e:
+            logger.error(f"无法访问 Wikipedia API: {str(e)}")
+            return jsonify({
+                'error': f'无法访问维基百科 API: {str(e)}',
+                'hint': '服务器可能无法访问外网，请检查网络配置或代理设置'
+            }), 503
+
         # 递归构建分类树
         def build_tree(cat_name, current_depth, max_children=15):
             node = {

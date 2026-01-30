@@ -4317,17 +4317,30 @@ function generateWikiCategoryTree(rootCategory) {
     function renderCategoryTree(treeData, container) {
         // 如果有ECharts库
         if (typeof echarts !== 'undefined') {
-            // 先销毁旧的图表实例
-            if (window.wikiCategoryTreeChart) {
-                window.wikiCategoryTreeChart.dispose();
-                window.wikiCategoryTreeChart = null;
-            }
+            try {
+                // 先销毁旧的图表实例
+                const existingChart = echarts.getInstanceByDom(container);
+                if (existingChart) {
+                    existingChart.dispose();
+                }
+                if (window.wikiCategoryTreeChart) {
+                    try {
+                        window.wikiCategoryTreeChart.dispose();
+                    } catch (e) {
+                        // 忽略
+                    }
+                    window.wikiCategoryTreeChart = null;
+                }
 
-            // 确保容器有足够高度
-            container.style.height = '500px';
+                // 清空容器内容
+                container.innerHTML = '';
 
-            // 使用ECharts渲染树形图
-            const myChart = echarts.init(container);
+                // 确保容器有足够高度
+                container.style.height = '500px';
+                container.style.width = '100%';
+
+                // 使用ECharts渲染树形图
+                const myChart = echarts.init(container);
             
             // 转换数据格式为ECharts树图所需的格式
             function convertToEChartsTree(node) {
@@ -4396,14 +4409,26 @@ function generateWikiCategoryTree(rootCategory) {
             };
             
             myChart.setOption(option);
-            
+
             // 保存图表实例
             window.wikiCategoryTreeChart = myChart;
-            
+
             // 添加窗口大小变化时的自适应调整
             window.addEventListener('resize', function() {
-                myChart.resize();
+                if (myChart && !myChart.isDisposed()) {
+                    myChart.resize();
+                }
             });
+            } catch (e) {
+                console.error('ECharts 渲染错误:', e);
+                container.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 图表渲染失败: ${e.message}
+                        <br><small>数据已获取，但可视化组件出错</small>
+                    </div>
+                    <pre style="max-height: 300px; overflow: auto; font-size: 12px;">${JSON.stringify(treeData, null, 2)}</pre>
+                `;
+            }
         } else {
             // 备用方案：显示简单的分类树
             function renderSimpleTree(node, level = 0) {
