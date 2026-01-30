@@ -878,12 +878,13 @@ class WikipediaAPICrawler:
         """
         try:
             # 获取页面内容和元信息
+            # 注意：不要设置 exintro 参数，因为它是一个标志参数
+            # 只要存在就会生效（无论值是什么），导致只返回引言部分
             params = {
                 'action': 'query',
                 'titles': title,
                 'prop': 'extracts|info|categories|links',
-                'exintro': False,
-                'explaintext': True,
+                'explaintext': True,  # 返回纯文本而非 HTML
                 'inprop': 'url',
                 'cllimit': 50,
                 'pllimit': 100,

@@ -661,6 +661,179 @@ def wiki_get_category():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/wiki/category-tree', methods=['GET', 'POST'])
+def wiki_get_category_tree():
+    """
+    获取维基百科分类树结构
+    参数:
+        name/category/rootCategory: 根分类名称 (不含 Category: 前缀)
+        lang/language: 语言 (默认 zh)
+        depth: 递归深度 (默认 2)
+        include_pages: 是否包含页面 (默认 true)
+    """
+    import requests as req
+
+    # 支持 GET 和 POST
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        category_name = data.get('rootCategory') or data.get('category') or data.get('name', '')
+        language = data.get('language') or data.get('lang', 'zh')
+        depth = int(data.get('depth', 2))
+        include_pages = data.get('includePages', data.get('include_pages', True))
+    else:
+        category_name = request.args.get('category') or request.args.get('name') or request.args.get('rootCategory', '')
+        language = request.args.get('lang') or request.args.get('language', 'zh')
+        depth = int(request.args.get('depth', 2))
+        include_pages = request.args.get('include_pages', '1') in ['1', 'true', 'True']
+
+    if not category_name:
+        return jsonify({'error': '请提供分类名称'}), 400
+
+    try:
+        api_url = f"https://{language}.wikipedia.org/w/api.php"
+
+        # 递归构建分类树
+        def build_tree(cat_name, current_depth):
+            node = {
+                'name': cat_name,
+                'type': 'category',
+                'children': [],
+                'pages': []
+            }
+
+            if current_depth <= 0:
+                return node
+
+            # 获取分类成员
+            params = {
+                'action': 'query',
+                'list': 'categorymembers',
+                'cmtitle': f'Category:{cat_name}',
+                'cmlimit': 50,
+                'format': 'json'
+            }
+
+            try:
+                response = req.get(api_url, params=params, timeout=15)
+                data = response.json()
+
+                if 'query' in data and 'categorymembers' in data['query']:
+                    for member in data['query']['categorymembers']:
+                        if member['ns'] == 14:  # 子分类 (namespace 14)
+                            subcat_name = member['title'].replace('Category:', '')
+                            child_node = build_tree(subcat_name, current_depth - 1)
+                            node['children'].append(child_node)
+                        elif member['ns'] == 0 and include_pages:  # 普通页面
+                            node['pages'].append({
+                                'title': member['title'],
+                                'pageid': member['pageid']
+                            })
+            except Exception as e:
+                logger.warning(f"获取分类 {cat_name} 成员失败: {str(e)}")
+
+            return node
+
+        tree = build_tree(category_name, depth)
+
+        return jsonify({
+            'root': tree,
+            'language': language,
+            'depth': depth
+        })
+
+    except Exception as e:
+        logger.error(f"获取 Wikipedia 分类树出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/path', methods=['POST'])
+def wiki_find_path():
+    """
+    查找两个维基百科页面之间的链接路径
+    参数 (JSON):
+        source: 源页面标题
+        target: 目标页面标题
+        language: 语言 (默认 zh)
+    """
+    import requests as req
+
+    data = request.get_json() or {}
+    source = data.get('source', '')
+    target = data.get('target', '')
+    language = data.get('language', 'zh')
+
+    if not source or not target:
+        return jsonify({'error': '请提供源页面和目标页面'}), 400
+
+    try:
+        api_url = f"https://{language}.wikipedia.org/w/api.php"
+
+        # 使用 BFS 查找路径
+        from collections import deque
+
+        visited = {source}
+        queue = deque([(source, [source])])
+        max_depth = 3  # 限制搜索深度
+        max_links_per_page = 100
+
+        while queue:
+            current, path = queue.popleft()
+
+            if len(path) > max_depth:
+                break
+
+            # 获取当前页面的链接
+            params = {
+                'action': 'query',
+                'titles': current,
+                'prop': 'links',
+                'pllimit': max_links_per_page,
+                'format': 'json'
+            }
+
+            try:
+                response = req.get(api_url, params=params, timeout=10)
+                result = response.json()
+
+                pages = result.get('query', {}).get('pages', {})
+                for page_data in pages.values():
+                    links = page_data.get('links', [])
+                    for link in links:
+                        link_title = link.get('title', '')
+
+                        if link_title == target:
+                            # 找到目标
+                            final_path = path + [link_title]
+                            return jsonify({
+                                'found': True,
+                                'path': final_path,
+                                'length': len(final_path),
+                                'source': source,
+                                'target': target
+                            })
+
+                        if link_title not in visited and len(path) < max_depth:
+                            visited.add(link_title)
+                            queue.append((link_title, path + [link_title]))
+
+            except Exception as e:
+                logger.warning(f"获取页面链接失败 {current}: {str(e)}")
+                continue
+
+        # 未找到路径
+        return jsonify({
+            'found': False,
+            'path': [],
+            'message': f'在 {max_depth} 步内未找到从 "{source}" 到 "{target}" 的路径',
+            'source': source,
+            'target': target
+        })
+
+    except Exception as e:
+        logger.error(f"查找页面路径出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/wiki/random', methods=['GET'])
 def wiki_random_pages():
     """
