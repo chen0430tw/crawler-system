@@ -4630,17 +4630,32 @@ function findWikiPagePath(sourcePage, targetPage) {
     
     // 渲染页面路径
     function renderPagePath(pathData, container) {
+        // 路径可能是字符串数组或对象数组，统一处理
+        const pathArray = pathData.path.map(item => typeof item === 'string' ? item : item.title);
+
+        // 先显示文字路径
+        const pathText = pathArray.join(' → ');
+        const statsText = pathData.pages_searched ? `（搜索了 ${pathData.pages_searched} 个页面）` : '';
+
         // 如果有ECharts库
         if (typeof echarts !== 'undefined') {
+            // 清空容器并设置高度
+            container.innerHTML = '';
+            container.style.height = '400px';
+
+            // 销毁旧实例
+            const existingChart = echarts.getInstanceByDom(container);
+            if (existingChart) existingChart.dispose();
+
             // 使用ECharts渲染路径图
             const myChart = echarts.init(container);
-            
+
             // 准备节点和链接数据
-            const nodes = pathData.path.map((page, index) => ({
+            const nodes = pathArray.map((page, index) => ({
                 id: index,
-                name: page.title,
-                value: index === 0 || index === pathData.path.length - 1 ? 2 : 1,
-                category: index === 0 ? 0 : (index === pathData.path.length - 1 ? 1 : 2)
+                name: page,
+                value: index === 0 || index === pathArray.length - 1 ? 2 : 1,
+                category: index === 0 ? 0 : (index === pathArray.length - 1 ? 1 : 2)
             }));
             
             const links = [];
@@ -4653,8 +4668,8 @@ function findWikiPagePath(sourcePage, targetPage) {
             
             const option = {
                 title: {
-                    text: `维基百科页面路径: ${sourcePage} → ${targetPage}`,
-                    subtext: `路径长度: ${pathData.path.length - 1} 步`,
+                    text: `维基百科页面路径: ${pathArray[0]} → ${pathArray[pathArray.length - 1]}`,
+                    subtext: `路径长度: ${pathArray.length - 1} 步 ${statsText}`,
                     left: 'center'
                 },
                 tooltip: {
@@ -4717,32 +4732,34 @@ function findWikiPagePath(sourcePage, targetPage) {
             });
         } else {
             // 备用方案：显示简单的路径
+            const lang = document.getElementById('wiki-language-selector')?.value || 'zh';
             let html = `
                 <div class="wiki-path-container">
-                    <h4>从 "${sourcePage}" 到 "${targetPage}" 的路径</h4>
-                    <p>路径长度: ${pathData.path.length - 1} 步</p>
+                    <h4>从 "${pathArray[0]}" 到 "${pathArray[pathArray.length - 1]}" 的路径</h4>
+                    <p>路径长度: ${pathArray.length - 1} 步 ${statsText}</p>
                     <div class="wiki-path">
             `;
-            
-            pathData.path.forEach((page, index) => {
+
+            pathArray.forEach((pageTitle, index) => {
+                const pageUrl = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(pageTitle)}`;
                 html += `
                     <div class="wiki-path-node">
                         <div class="wiki-path-icon">
-                            ${index === 0 ? '<i class="bi bi-house-fill"></i>' : 
-                              (index === pathData.path.length - 1 ? '<i class="bi bi-flag-fill"></i>' : 
+                            ${index === 0 ? '<i class="bi bi-house-fill"></i>' :
+                              (index === pathArray.length - 1 ? '<i class="bi bi-flag-fill"></i>' :
                                `<span class="step-number">${index}</span>`)}
                         </div>
                         <div class="wiki-path-content">
-                            <div class="wiki-path-title">${page.title}</div>
+                            <div class="wiki-path-title">${pageTitle}</div>
                             <div class="wiki-path-url">
-                                <a href="${page.url}" target="_blank">${page.url}</a>
+                                <a href="${pageUrl}" target="_blank">查看页面</a>
                             </div>
                         </div>
                     </div>
                 `;
-                
+
                 // 添加连接线（除了最后一个节点）
-                if (index < pathData.path.length - 1) {
+                if (index < pathArray.length - 1) {
                     html += '<div class="wiki-path-connector"><i class="bi bi-arrow-down"></i></div>';
                 }
             });
