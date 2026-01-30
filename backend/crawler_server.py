@@ -65,12 +65,25 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 限制上传大小为16MB
 # 存储爬虫任务状态
 tasks = {}
 
+# Wiki 专用任务存储
+wiki_tasks = {}
+
+# Wiki 统计数据
+wiki_stats = {
+    'total_pages_fetched': 0,
+    'total_searches': 0,
+    'total_tasks': 0,
+    'languages_used': {},
+    'last_activity': None
+}
+
 # 任务状态定义
 TASK_STATUS = {
     'PENDING': '等待中',
     'RUNNING': '运行中',
     'COMPLETED': '已完成',
-    'FAILED': '失败'
+    'FAILED': '失败',
+    'CANCELLED': '已取消'
 }
 
 # 添加静态文件服务
@@ -575,6 +588,13 @@ def wiki_search():
     try:
         crawler = get_wiki_crawler(language)
         results = crawler.search(query, limit=limit)
+
+        # 更新统计
+        global wiki_stats
+        wiki_stats['total_searches'] += 1
+        wiki_stats['last_activity'] = datetime.now().isoformat()
+        wiki_stats['languages_used'][language] = wiki_stats['languages_used'].get(language, 0) + 1
+
         return jsonify({
             'query': query,
             'language': language,
@@ -661,6 +681,179 @@ def wiki_get_category():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/wiki/category-tree', methods=['GET', 'POST'])
+def wiki_get_category_tree():
+    """
+    获取维基百科分类树结构
+    参数:
+        name/category/rootCategory: 根分类名称 (不含 Category: 前缀)
+        lang/language: 语言 (默认 zh)
+        depth: 递归深度 (默认 2)
+        include_pages: 是否包含页面 (默认 true)
+    """
+    import requests as req
+
+    # 支持 GET 和 POST
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        category_name = data.get('rootCategory') or data.get('category') or data.get('name', '')
+        language = data.get('language') or data.get('lang', 'zh')
+        depth = int(data.get('depth', 2))
+        include_pages = data.get('includePages', data.get('include_pages', True))
+    else:
+        category_name = request.args.get('category') or request.args.get('name') or request.args.get('rootCategory', '')
+        language = request.args.get('lang') or request.args.get('language', 'zh')
+        depth = int(request.args.get('depth', 2))
+        include_pages = request.args.get('include_pages', '1') in ['1', 'true', 'True']
+
+    if not category_name:
+        return jsonify({'error': '请提供分类名称'}), 400
+
+    try:
+        api_url = f"https://{language}.wikipedia.org/w/api.php"
+
+        # 递归构建分类树
+        def build_tree(cat_name, current_depth):
+            node = {
+                'name': cat_name,
+                'type': 'category',
+                'children': [],
+                'pages': []
+            }
+
+            if current_depth <= 0:
+                return node
+
+            # 获取分类成员
+            params = {
+                'action': 'query',
+                'list': 'categorymembers',
+                'cmtitle': f'Category:{cat_name}',
+                'cmlimit': 50,
+                'format': 'json'
+            }
+
+            try:
+                response = req.get(api_url, params=params, timeout=15)
+                data = response.json()
+
+                if 'query' in data and 'categorymembers' in data['query']:
+                    for member in data['query']['categorymembers']:
+                        if member['ns'] == 14:  # 子分类 (namespace 14)
+                            subcat_name = member['title'].replace('Category:', '')
+                            child_node = build_tree(subcat_name, current_depth - 1)
+                            node['children'].append(child_node)
+                        elif member['ns'] == 0 and include_pages:  # 普通页面
+                            node['pages'].append({
+                                'title': member['title'],
+                                'pageid': member['pageid']
+                            })
+            except Exception as e:
+                logger.warning(f"获取分类 {cat_name} 成员失败: {str(e)}")
+
+            return node
+
+        tree = build_tree(category_name, depth)
+
+        return jsonify({
+            'root': tree,
+            'language': language,
+            'depth': depth
+        })
+
+    except Exception as e:
+        logger.error(f"获取 Wikipedia 分类树出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/path', methods=['POST'])
+def wiki_find_path():
+    """
+    查找两个维基百科页面之间的链接路径
+    参数 (JSON):
+        source: 源页面标题
+        target: 目标页面标题
+        language: 语言 (默认 zh)
+    """
+    import requests as req
+
+    data = request.get_json() or {}
+    source = data.get('source', '')
+    target = data.get('target', '')
+    language = data.get('language', 'zh')
+
+    if not source or not target:
+        return jsonify({'error': '请提供源页面和目标页面'}), 400
+
+    try:
+        api_url = f"https://{language}.wikipedia.org/w/api.php"
+
+        # 使用 BFS 查找路径
+        from collections import deque
+
+        visited = {source}
+        queue = deque([(source, [source])])
+        max_depth = 3  # 限制搜索深度
+        max_links_per_page = 100
+
+        while queue:
+            current, path = queue.popleft()
+
+            if len(path) > max_depth:
+                break
+
+            # 获取当前页面的链接
+            params = {
+                'action': 'query',
+                'titles': current,
+                'prop': 'links',
+                'pllimit': max_links_per_page,
+                'format': 'json'
+            }
+
+            try:
+                response = req.get(api_url, params=params, timeout=10)
+                result = response.json()
+
+                pages = result.get('query', {}).get('pages', {})
+                for page_data in pages.values():
+                    links = page_data.get('links', [])
+                    for link in links:
+                        link_title = link.get('title', '')
+
+                        if link_title == target:
+                            # 找到目标
+                            final_path = path + [link_title]
+                            return jsonify({
+                                'found': True,
+                                'path': final_path,
+                                'length': len(final_path),
+                                'source': source,
+                                'target': target
+                            })
+
+                        if link_title not in visited and len(path) < max_depth:
+                            visited.add(link_title)
+                            queue.append((link_title, path + [link_title]))
+
+            except Exception as e:
+                logger.warning(f"获取页面链接失败 {current}: {str(e)}")
+                continue
+
+        # 未找到路径
+        return jsonify({
+            'found': False,
+            'path': [],
+            'message': f'在 {max_depth} 步内未找到从 "{source}" 到 "{target}" 的路径',
+            'source': source,
+            'target': target
+        })
+
+    except Exception as e:
+        logger.error(f"查找页面路径出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/wiki/random', methods=['GET'])
 def wiki_random_pages():
     """
@@ -724,6 +917,450 @@ def wiki_languages():
     """获取支持的维基百科语言列表"""
     return jsonify({
         'languages': WikipediaAPICrawler.SUPPORTED_LANGUAGES
+    })
+
+
+# ==================== Wiki 异步任务 API ====================
+
+def run_wiki_task(task_id, config):
+    """
+    在后台线程运行 Wiki 爬取任务
+    """
+    global wiki_stats
+    task = wiki_tasks[task_id]
+
+    try:
+        task['status'] = TASK_STATUS['RUNNING']
+        task['start_time'] = datetime.now().isoformat()
+
+        language = config.get('language', 'zh')
+        crawler = get_wiki_crawler(language)
+
+        results = []
+        titles = config.get('titles', [])
+        urls = config.get('urls', [])
+
+        # 合并 titles 和从 URLs 提取的标题
+        all_titles = list(titles)
+        for url in urls:
+            if '/wiki/' in url:
+                import urllib.parse
+                title = urllib.parse.unquote(url.split('/wiki/')[-1])
+                all_titles.append(title)
+
+        total = len(all_titles)
+
+        for i, title in enumerate(all_titles):
+            if task.get('cancelled'):
+                task['status'] = TASK_STATUS['CANCELLED']
+                return
+
+            try:
+                page_data = crawler.get_page(title)
+                if page_data:
+                    results.append(page_data)
+                    wiki_stats['total_pages_fetched'] += 1
+            except Exception as e:
+                logger.warning(f"获取页面失败 {title}: {str(e)}")
+
+            task['progress'] = int((i + 1) / total * 100)
+            time.sleep(0.5)  # 避免请求过快
+
+        # 保存结果
+        result_file = os.path.join(RESULTS_FOLDER, f"wiki_task_{task_id}.json")
+        with open(result_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                'task_id': task_id,
+                'config': config,
+                'results': results,
+                'count': len(results),
+                'timestamp': datetime.now().isoformat()
+            }, f, ensure_ascii=False, indent=2, cls=NumpyEncoder)
+
+        task['status'] = TASK_STATUS['COMPLETED']
+        task['result_file'] = result_file
+        task['result_count'] = len(results)
+        task['end_time'] = datetime.now().isoformat()
+
+        # 更新统计
+        wiki_stats['total_tasks'] += 1
+        wiki_stats['last_activity'] = datetime.now().isoformat()
+        wiki_stats['languages_used'][language] = wiki_stats['languages_used'].get(language, 0) + 1
+
+        logger.info(f"Wiki 任务完成: {task_id}, 获取 {len(results)} 个页面")
+
+    except Exception as e:
+        task['status'] = TASK_STATUS['FAILED']
+        task['error'] = str(e)
+        task['end_time'] = datetime.now().isoformat()
+        logger.error(f"Wiki 任务失败 {task_id}: {str(e)}")
+
+
+@app.route('/api/wiki/submit', methods=['POST'])
+def wiki_submit_task():
+    """
+    提交 Wiki 批量爬取任务
+    参数 (JSON):
+        titles: 页面标题列表
+        urls: 页面 URL 列表
+        language: 语言 (默认 zh)
+    """
+    try:
+        data = request.get_json() or {}
+
+        titles = data.get('titles', [])
+        urls = data.get('urls', [])
+
+        if not titles and not urls:
+            return jsonify({'error': '请提供页面标题或URL列表'}), 400
+
+        task_id = str(uuid.uuid4())
+
+        wiki_tasks[task_id] = {
+            'id': task_id,
+            'status': TASK_STATUS['PENDING'],
+            'progress': 0,
+            'created_at': datetime.now().isoformat(),
+            'config': data,
+            'cancelled': False
+        }
+
+        # 启动后台线程
+        thread = threading.Thread(
+            target=run_wiki_task,
+            args=(task_id, data)
+        )
+        thread.daemon = True
+        thread.start()
+
+        logger.info(f"已提交 Wiki 任务: {task_id}")
+
+        return jsonify({
+            'task_id': task_id,
+            'status': wiki_tasks[task_id]['status'],
+            'message': '任务已提交'
+        }), 202
+
+    except Exception as e:
+        logger.error(f"提交 Wiki 任务出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/status/<task_id>', methods=['GET'])
+def wiki_get_task_status(task_id):
+    """获取 Wiki 任务状态"""
+    if task_id not in wiki_tasks:
+        return jsonify({'error': '任务不存在'}), 404
+
+    task = wiki_tasks[task_id]
+
+    response = {
+        'id': task['id'],
+        'status': task['status'],
+        'progress': task['progress'],
+        'created_at': task['created_at']
+    }
+
+    for field in ['start_time', 'end_time', 'error', 'result_count']:
+        if field in task:
+            response[field] = task[field]
+
+    return jsonify(response)
+
+
+@app.route('/api/wiki/result/<task_id>', methods=['GET'])
+def wiki_get_task_result(task_id):
+    """获取 Wiki 任务结果"""
+    if task_id not in wiki_tasks:
+        return jsonify({'error': '任务不存在'}), 404
+
+    task = wiki_tasks[task_id]
+
+    if task['status'] != TASK_STATUS['COMPLETED']:
+        return jsonify({
+            'error': '任务尚未完成',
+            'status': task['status'],
+            'progress': task['progress']
+        }), 400
+
+    result_file = task.get('result_file')
+    if not result_file or not os.path.exists(result_file):
+        return jsonify({'error': '结果文件不存在'}), 404
+
+    try:
+        with open(result_file, 'r', encoding='utf-8') as f:
+            result = json.load(f)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': f'读取结果出错: {str(e)}'}), 500
+
+
+@app.route('/api/wiki/cancel/<task_id>', methods=['POST'])
+def wiki_cancel_task(task_id):
+    """取消 Wiki 任务"""
+    if task_id not in wiki_tasks:
+        return jsonify({'error': '任务不存在'}), 404
+
+    task = wiki_tasks[task_id]
+
+    if task['status'] in [TASK_STATUS['COMPLETED'], TASK_STATUS['FAILED'], TASK_STATUS['CANCELLED']]:
+        return jsonify({'error': '任务已结束，无法取消'}), 400
+
+    task['cancelled'] = True
+    task['status'] = TASK_STATUS['CANCELLED']
+    task['end_time'] = datetime.now().isoformat()
+
+    return jsonify({
+        'message': '任务已取消',
+        'task_id': task_id
+    })
+
+
+@app.route('/api/wiki/tasks', methods=['GET'])
+def wiki_list_tasks():
+    """列出所有 Wiki 任务"""
+    task_list = []
+
+    for task_id, task in wiki_tasks.items():
+        task_info = {
+            'id': task['id'],
+            'status': task['status'],
+            'progress': task['progress'],
+            'created_at': task['created_at']
+        }
+
+        for field in ['start_time', 'end_time', 'result_count']:
+            if field in task:
+                task_info[field] = task[field]
+
+        task_list.append(task_info)
+
+    task_list.sort(key=lambda x: x['created_at'], reverse=True)
+
+    return jsonify(task_list)
+
+
+@app.route('/api/wiki/download/<task_id>', methods=['GET'])
+def wiki_download_result(task_id):
+    """下载 Wiki 任务结果"""
+    if task_id not in wiki_tasks:
+        return jsonify({'error': '任务不存在'}), 404
+
+    task = wiki_tasks[task_id]
+
+    if task['status'] != TASK_STATUS['COMPLETED']:
+        return jsonify({'error': '任务尚未完成'}), 400
+
+    result_file = task.get('result_file')
+    if not result_file or not os.path.exists(result_file):
+        return jsonify({'error': '结果文件不存在'}), 404
+
+    format_type = request.args.get('format', 'json')
+
+    if format_type == 'json':
+        return send_from_directory(
+            os.path.dirname(result_file),
+            os.path.basename(result_file),
+            as_attachment=True,
+            download_name=f"wiki_results_{task_id}.json"
+        )
+    elif format_type == 'txt':
+        # 转换为文本格式
+        try:
+            with open(result_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            text_content = []
+            for page in data.get('results', []):
+                text_content.append(f"# {page.get('title', '未知标题')}")
+                text_content.append(f"URL: {page.get('url', '')}")
+                text_content.append(f"\n{page.get('text', page.get('summary', ''))}\n")
+                text_content.append("=" * 50 + "\n")
+
+            from flask import Response
+            return Response(
+                '\n'.join(text_content),
+                mimetype='text/plain; charset=utf-8',
+                headers={'Content-Disposition': f'attachment; filename=wiki_results_{task_id}.txt'}
+            )
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    else:
+        return jsonify({'error': f'不支持的格式: {format_type}'}), 400
+
+
+@app.route('/api/wiki/extract', methods=['POST'])
+def wiki_extract_info():
+    """
+    提取维基百科页面结构化信息
+    参数 (JSON):
+        url: 页面 URL
+        title: 页面标题 (与 url 二选一)
+        language: 语言 (默认 zh)
+    """
+    data = request.get_json() or {}
+    url = data.get('url', '')
+    title = data.get('title', '')
+    language = data.get('language', 'zh')
+
+    # 从 URL 提取标题
+    if url and not title:
+        if '/wiki/' in url:
+            import urllib.parse
+            title = urllib.parse.unquote(url.split('/wiki/')[-1])
+            # 尝试从 URL 提取语言
+            if '.wikipedia.org' in url:
+                lang_match = url.split('.wikipedia.org')[0].split('//')[-1]
+                if lang_match and len(lang_match) <= 5:
+                    language = lang_match
+
+    if not title:
+        return jsonify({'error': '请提供页面 URL 或标题'}), 400
+
+    try:
+        crawler = get_wiki_crawler(language)
+        page_data = crawler.get_page(title)
+
+        if not page_data:
+            return jsonify({'error': f'页面不存在: {title}'}), 404
+
+        # 提取结构化信息
+        extracted = {
+            'title': page_data.get('title', title),
+            'url': page_data.get('url', ''),
+            'summary': page_data.get('summary', ''),
+            'sections': page_data.get('sections', []),
+            'categories': page_data.get('categories', []),
+            'links': page_data.get('links', [])[:50],
+            'language': language,
+            'word_count': len(page_data.get('text', '')),
+            'extracted_at': datetime.now().isoformat()
+        }
+
+        return jsonify(extracted)
+
+    except Exception as e:
+        logger.error(f"提取 Wiki 信息出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/infobox', methods=['GET'])
+def wiki_get_infobox():
+    """
+    获取维基百科页面信息框
+    参数:
+        title: 页面标题
+        url: 页面 URL (与 title 二选一)
+        lang: 语言 (默认 zh)
+    """
+    import requests as req
+
+    title = request.args.get('title', '')
+    url = request.args.get('url', '')
+    language = request.args.get('lang', 'zh')
+
+    # 从 URL 提取标题
+    if url and not title:
+        if '/wiki/' in url:
+            import urllib.parse
+            title = urllib.parse.unquote(url.split('/wiki/')[-1])
+            if '.wikipedia.org' in url:
+                lang_match = url.split('.wikipedia.org')[0].split('//')[-1]
+                if lang_match and len(lang_match) <= 5:
+                    language = lang_match
+
+    if not title:
+        return jsonify({'error': '请提供页面标题或 URL'}), 400
+
+    try:
+        api_url = f"https://{language}.wikipedia.org/w/api.php"
+
+        # 获取页面 HTML 以提取 infobox
+        params = {
+            'action': 'parse',
+            'page': title,
+            'prop': 'text',
+            'format': 'json'
+        }
+
+        response = req.get(api_url, params=params, timeout=15)
+        data = response.json()
+
+        if 'error' in data:
+            return jsonify({'error': data['error'].get('info', '获取页面失败')}), 404
+
+        html_content = data.get('parse', {}).get('text', {}).get('*', '')
+
+        # 简单提取 infobox 信息 (基于常见的 infobox 类名)
+        from html.parser import HTMLParser
+
+        infobox_data = {
+            'title': title,
+            'has_infobox': False,
+            'fields': {}
+        }
+
+        # 检查是否有 infobox
+        if 'infobox' in html_content.lower():
+            infobox_data['has_infobox'] = True
+
+            # 使用正则提取表格行
+            import re
+
+            # 匹配 infobox 中的 th 和 td
+            pattern = r'<tr[^>]*>.*?<th[^>]*>(.*?)</th>.*?<td[^>]*>(.*?)</td>.*?</tr>'
+            matches = re.findall(pattern, html_content, re.DOTALL | re.IGNORECASE)
+
+            for label, value in matches[:20]:  # 限制字段数量
+                # 清理 HTML 标签
+                label_clean = re.sub(r'<[^>]+>', '', label).strip()
+                value_clean = re.sub(r'<[^>]+>', '', value).strip()
+
+                if label_clean and value_clean:
+                    infobox_data['fields'][label_clean] = value_clean
+
+        return jsonify(infobox_data)
+
+    except Exception as e:
+        logger.error(f"获取 Wiki infobox 出错: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wiki/stats', methods=['GET'])
+def wiki_get_stats():
+    """获取 Wiki 爬虫统计信息"""
+    global wiki_stats
+
+    # 计算任务统计
+    task_stats = {
+        'total': len(wiki_tasks),
+        'pending': 0,
+        'running': 0,
+        'completed': 0,
+        'failed': 0,
+        'cancelled': 0
+    }
+
+    for task in wiki_tasks.values():
+        status = task['status']
+        if status == TASK_STATUS['PENDING']:
+            task_stats['pending'] += 1
+        elif status == TASK_STATUS['RUNNING']:
+            task_stats['running'] += 1
+        elif status == TASK_STATUS['COMPLETED']:
+            task_stats['completed'] += 1
+        elif status == TASK_STATUS['FAILED']:
+            task_stats['failed'] += 1
+        elif status == TASK_STATUS['CANCELLED']:
+            task_stats['cancelled'] += 1
+
+    return jsonify({
+        'pages_fetched': wiki_stats['total_pages_fetched'],
+        'searches_performed': wiki_stats['total_searches'],
+        'tasks': task_stats,
+        'languages_used': wiki_stats['languages_used'],
+        'last_activity': wiki_stats['last_activity'],
+        'supported_languages': list(WikipediaAPICrawler.SUPPORTED_LANGUAGES.keys())
     })
 
 
