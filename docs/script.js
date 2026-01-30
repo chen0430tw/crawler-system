@@ -4531,41 +4531,101 @@ function findWikiPagePath(sourcePage, targetPage) {
     // 获取可视化容器
     const container = document.getElementById('wiki-visualization-container');
     if (!container) return;
-    
+
     // 获取选中的语言
     const language = document.getElementById('wiki-language-selector').value || 'zh';
-    
-    // 显示加载中状态
+
+    // 显示加载中状态（带预计时间提示）
     container.innerHTML = `
         <div class="text-center py-5">
             <div class="spinner-border" role="status">
                 <span class="visually-hidden">加载中...</span>
             </div>
-            <p class="mt-2">正在查找页面路径，这可能需要一些时间...</p>
+            <p class="mt-2">正在查找页面路径...</p>
+            <p class="text-muted small">搜索可能需要30-60秒，请耐心等待</p>
+            <p class="text-muted small" id="path-search-timer">已用时: 0秒</p>
         </div>
     `;
-    
+
+    // 显示计时器
+    const startTime = Date.now();
+    const timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const timerEl = document.getElementById('path-search-timer');
+        if (timerEl) {
+            timerEl.textContent = `已用时: ${elapsed}秒`;
+        }
+    }, 1000);
+
     // 调用API查找路径
     ApiClient.findWikiPagePath(sourcePage, targetPage, { language: language })
         .then(result => {
-            if (!result || !result.path || result.path.length === 0) {
+            clearInterval(timerInterval);
+
+            // 未找到路径
+            if (!result.found) {
+                let alertClass = 'alert-warning';
+                let icon = 'bi-exclamation-triangle';
+                let extraInfo = '';
+
+                if (result.stop_reason === 'timeout') {
+                    alertClass = 'alert-info';
+                    icon = 'bi-clock';
+                } else if (result.stop_reason === 'page_limit') {
+                    alertClass = 'alert-info';
+                    icon = 'bi-info-circle';
+                }
+
+                if (result.suggestion) {
+                    extraInfo = `<p class="small text-muted mt-2">${result.suggestion}</p>`;
+                }
+
                 container.innerHTML = `
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle"></i> 未能找到从"${sourcePage}"到"${targetPage}"的路径
+                    <div class="${alertClass} alert">
+                        <i class="bi ${icon}"></i> ${result.message || '未找到路径'}
+                        <br><small>搜索了 ${result.pages_searched || 0} 个页面，用时 ${result.time_spent || 0} 秒</small>
+                        ${extraInfo}
+                        <hr>
+                        <button class="btn btn-sm btn-outline-primary" id="retry-path-search">
+                            <i class="bi bi-arrow-clockwise"></i> 重新搜索
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" id="change-path-params">
+                            <i class="bi bi-pencil"></i> 修改关键词
+                        </button>
                     </div>
                 `;
+
+                // 绑定重试按钮
+                document.getElementById('retry-path-search')?.addEventListener('click', () => {
+                    findWikiPagePath(sourcePage, targetPage);
+                });
+
+                // 绑定修改关键词按钮
+                document.getElementById('change-path-params')?.addEventListener('click', () => {
+                    document.getElementById('wiki-path-source')?.focus();
+                    container.innerHTML = '<div class="alert alert-info">请修改上方的源页面或目标页面，然后点击"查找路径"</div>';
+                });
+
                 return;
             }
-            
-            // 渲染路径
+
+            // 找到路径，渲染结果
             renderPagePath(result, container);
         })
         .catch(error => {
+            clearInterval(timerInterval);
             container.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-circle"></i> 查找路径失败: ${error.message || '未知错误'}
+                    <hr>
+                    <button class="btn btn-sm btn-outline-primary" id="retry-path-search-error">
+                        <i class="bi bi-arrow-clockwise"></i> 重试
+                    </button>
                 </div>
             `;
+            document.getElementById('retry-path-search-error')?.addEventListener('click', () => {
+                findWikiPagePath(sourcePage, targetPage);
+            });
         });
     
     // 渲染页面路径

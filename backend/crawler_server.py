@@ -838,12 +838,14 @@ def wiki_find_path():
         }
 
         start_time = time.time()
-        max_time = 30  # 最多搜索30秒
-        max_pages = 200  # 最多访问200个页面
+        max_time = 60  # 最多搜索60秒
+        max_pages = 100  # 最多访问100个页面
         pages_visited = 0
+        request_delay = 0.5  # 每个请求间隔0.5秒，防止被封
 
         def get_links(page_title):
             """获取页面的链接"""
+            time.sleep(request_delay)  # 请求间隔
             params = {
                 'action': 'query',
                 'titles': page_title,
@@ -872,9 +874,13 @@ def wiki_find_path():
         backward_visited = {target: [target]}
         backward_queue = deque([target])
 
+        stop_reason = None
+
         while (forward_queue or backward_queue) and pages_visited < max_pages:
             # 检查时间限制
-            if time.time() - start_time > max_time:
+            elapsed = time.time() - start_time
+            if elapsed > max_time:
+                stop_reason = 'timeout'
                 break
 
             # 前向搜索一步
@@ -913,14 +919,27 @@ def wiki_find_path():
                             })
 
         # 未找到路径
+        elapsed = round(time.time() - start_time, 2)
+
+        if stop_reason == 'timeout':
+            message = f'搜索超时（{elapsed}秒），已搜索 {pages_visited} 个页面'
+        elif pages_visited >= max_pages:
+            message = f'已达到页面上限（{max_pages}页），未找到路径'
+            stop_reason = 'page_limit'
+        else:
+            message = f'搜索完成，未找到从 "{source}" 到 "{target}" 的路径'
+            stop_reason = 'not_found'
+
         return jsonify({
             'found': False,
             'path': [],
-            'message': f'在限制内未找到从 "{source}" 到 "{target}" 的路径（已搜索 {pages_visited} 个页面）',
+            'message': message,
+            'stop_reason': stop_reason,
             'source': source,
             'target': target,
             'pages_searched': pages_visited,
-            'time_spent': round(time.time() - start_time, 2)
+            'time_spent': elapsed,
+            'suggestion': '建议尝试更相关的页面，或使用英文维基百科（链接更密集）'
         })
 
     except Exception as e:
