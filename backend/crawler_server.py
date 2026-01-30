@@ -711,6 +711,7 @@ def wiki_get_category_tree():
 
     try:
         api_url = f"https://{language}.wikipedia.org/w/api.php"
+        logger.info(f"开始获取分类树: category={category_name}, lang={language}, depth={depth}")
 
         # 递归构建分类树
         def build_tree(cat_name, current_depth, max_children=15):
@@ -737,12 +738,14 @@ def wiki_get_category_tree():
 
             try:
                 response = req.get(api_url, params=subcat_params, timeout=15)
+                response.raise_for_status()
                 data = response.json()
 
-                logger.info(f"分类 '{cat_name}' API 响应: {len(data.get('query', {}).get('categorymembers', []))} 个子分类")
+                members = data.get('query', {}).get('categorymembers', [])
+                logger.info(f"分类 '{cat_name}' 获取到 {len(members)} 个子分类")
 
-                if 'query' in data and 'categorymembers' in data['query']:
-                    for member in data['query']['categorymembers']:
+                if members:
+                    for member in members:
                         # 移除 Category: 或 分类: 前缀
                         subcat_name = member['title']
                         for prefix in ['Category:', '分类:', 'category:']:
@@ -752,9 +755,12 @@ def wiki_get_category_tree():
 
                         child_node = build_tree(subcat_name, current_depth - 1, max_children)
                         node['children'].append(child_node)
+                else:
+                    logger.info(f"分类 '{cat_name}' 没有子分类，API响应: {data}")
 
             except Exception as e:
-                logger.warning(f"获取分类 {cat_name} 子分类失败: {str(e)}")
+                logger.error(f"获取分类 {cat_name} 子分类失败: {str(e)}")
+                node['error'] = str(e)
 
             # 如果需要包含页面
             if include_pages:
