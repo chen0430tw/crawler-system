@@ -18,5 +18,8 @@ numpy>=1.19.0
 chardet>=5.2.0
 Brotli>=1.1.0
 
+# 浏览器自动化 (可选，用于 JS 渲染页面)
+playwright>=1.40.0
+
 # XML 解析 (arXiv)
 feedparser>=6.0.0

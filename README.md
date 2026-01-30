@@ -221,6 +221,20 @@ A: 后端服务器未启动或无法连接。请确保运行了 `python crawler_
 **Q: 爬取失败或被封禁？**
 A: 降低并发数，或添加代理。部分网站有反爬机制。
 
+**Q: 如何处理需要 JavaScript 渲染的页面？**
+A: 系统支持 Playwright 浏览器模式。安装 Playwright 后启用：
+
+```bash
+# 安装 Playwright
+pip install playwright
+playwright install chromium
+
+# 在代码中启用浏览器模式
+crawler = WebCrawler(use_browser=True)
+```
+
+系统会自动检测需要 JS 渲染的页面（如 "请使用现代浏览器" 提示），并自动切换到 Playwright 进行渲染。
+
 **Q: 如何添加新的爬虫平台？**
 A: 在 `backend/crawler.py` 中创建新的 Crawler 类，并注册到 CrawlerHub。
 
