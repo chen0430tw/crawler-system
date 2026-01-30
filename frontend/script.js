@@ -4265,14 +4265,35 @@ function generateWikiLinkGraph(result) {
 }
 
 // 26. 生成维基百科分类树
+// 用于跟踪当前请求
+let currentCategoryTreeRequest = null;
+
 function generateWikiCategoryTree(rootCategory) {
     // 获取可视化容器
     const container = document.getElementById('wiki-visualization-container');
     if (!container) return;
-    
+
+    // 取消之前的请求（如果有）
+    if (currentCategoryTreeRequest) {
+        currentCategoryTreeRequest.cancelled = true;
+    }
+
+    // 销毁旧的图表实例
+    if (window.wikiCategoryTreeChart) {
+        try {
+            window.wikiCategoryTreeChart.dispose();
+        } catch (e) {
+            console.warn('销毁旧图表失败:', e);
+        }
+        window.wikiCategoryTreeChart = null;
+    }
+
+    // 清空容器
+    container.innerHTML = '';
+
     // 获取是否包含页面
     const includePages = document.getElementById('wiki-tree-include-pages').checked;
-    
+
     // 显示加载中状态
     container.innerHTML = `
         <div class="text-center py-5">
@@ -4282,10 +4303,14 @@ function generateWikiCategoryTree(rootCategory) {
             <p class="mt-2">正在获取维基百科分类结构，请稍候...</p>
         </div>
     `;
-    
+
     // 获取选中的语言
     const language = document.getElementById('wiki-language-selector').value || 'zh';
-    
+
+    // 创建新请求标记
+    const thisRequest = { cancelled: false };
+    currentCategoryTreeRequest = thisRequest;
+
     // 调用API获取分类树
     ApiClient.getWikiCategoryTree(rootCategory, {
         language: language,
@@ -4293,19 +4318,48 @@ function generateWikiCategoryTree(rootCategory) {
         depth: 2
     })
         .then(result => {
+            // 检查请求是否已被取消
+            if (thisRequest.cancelled) {
+                console.log('分类树请求已取消');
+                return;
+            }
+
+            console.log('分类树 API 响应:', result);
+
             if (!result || !result.root) {
                 container.innerHTML = `
                     <div class="alert alert-warning">
                         <i class="bi bi-exclamation-triangle"></i> 未能获取分类树
+                        <br><small>API 返回: ${JSON.stringify(result)}</small>
                     </div>
                 `;
                 return;
             }
-            
+
+            // 检查是否有子分类或页面
+            const hasChildren = result.root.children && result.root.children.length > 0;
+            const hasPages = result.root.pages && result.root.pages.length > 0;
+
+            if (!hasChildren && !hasPages) {
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 分类 "${rootCategory}" 没有子分类或页面
+                        <br><small>可能是分类名称不正确，或该分类为空</small>
+                    </div>
+                `;
+                return;
+            }
+
             // 渲染分类树
             renderCategoryTree(result, container);
         })
         .catch(error => {
+            // 检查请求是否已被取消
+            if (thisRequest.cancelled) {
+                return;
+            }
+
+            console.error('分类树获取失败:', error);
             container.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-circle"></i> 获取分类树失败: ${error.message || '未知错误'}
