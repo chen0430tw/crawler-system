@@ -124,7 +124,7 @@ except ImportError:
 class WebCrawler:
     """网页爬虫类，负责下载和解析网页"""
 
-    def __init__(self, max_workers=3, max_retries=3, timeout=30, use_browser=False):
+    def __init__(self, max_workers=3, max_retries=3, timeout=30, use_browser=False, proxy=None):
         """
         初始化爬虫
 
@@ -133,6 +133,7 @@ class WebCrawler:
             max_retries: 最大重试次数
             timeout: 请求超时时间(秒)
             use_browser: 是否使用浏览器模式 (Playwright) 处理 JS 渲染的页面
+            proxy: 代理服务器地址 (如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080)
         """
         self.max_workers = max_workers
         self.max_retries = max_retries
@@ -140,6 +141,15 @@ class WebCrawler:
         self.session = requests.Session()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.visited_urls = set()
+
+        # 代理设置
+        self.proxy = proxy
+        if proxy:
+            self.session.proxies = {
+                'http': proxy,
+                'https': proxy
+            }
+            logger.info(f"已启用代理: {proxy}")
 
         # 浏览器模式 (Playwright)
         self.use_browser = use_browser
@@ -184,11 +194,18 @@ class WebCrawler:
                     '--no-sandbox',
                 ]
             )
-            self._browser_context = self._browser.new_context(
-                user_agent=self._get_random_user_agent(),
-                viewport={'width': 1920, 'height': 1080},
-                locale='zh-CN',
-            )
+
+            # 配置 Playwright 的代理
+            context_options = {
+                'user_agent': self._get_random_user_agent(),
+                'viewport': {'width': 1920, 'height': 1080},
+                'locale': 'zh-CN',
+            }
+            if self.proxy:
+                context_options['proxy'] = {'server': self.proxy}
+                logger.info(f"Playwright 使用代理: {self.proxy}")
+
+            self._browser_context = self._browser.new_context(**context_options)
             logger.info("Playwright 浏览器初始化成功")
             return True
         except ImportError:

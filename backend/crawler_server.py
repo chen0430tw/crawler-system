@@ -125,20 +125,28 @@ def run_crawler_task(task_id, config):
         format_type = config.get('format', 'html')
         concurrency = config.get('concurrency', 3)
         enable_urban_legend = config.get('enable_urban_legend', True)
-        
+        proxy = config.get('proxy')  # 代理服务器
+        use_browser = config.get('use_browser', False)  # 浏览器模式
+
         logger.info(f"任务 {task_id} 开始运行，爬取 {len(urls)} 个URL，深度为 {depth}")
-        
+        if proxy:
+            logger.info(f"任务 {task_id} 使用代理: {proxy}")
+        if use_browser:
+            logger.info(f"任务 {task_id} 启用浏览器模式")
+
         # 更新任务详情
         tasks[task_id]['details'] = {
             'urls_count': len(urls),
             'depth': depth,
             'format': format_type,
             'concurrency': concurrency,
-            'urban_legend_enabled': enable_urban_legend
+            'urban_legend_enabled': enable_urban_legend,
+            'proxy': proxy,
+            'use_browser': use_browser
         }
-        
+
         # 初始化爬虫组件
-        crawler = WebCrawler(max_workers=concurrency)
+        crawler = WebCrawler(max_workers=concurrency, use_browser=use_browser, proxy=proxy)
         processor = DataProcessor()
         storage = StorageManager(base_dir=os.path.join(RESULTS_FOLDER, task_id))
         

@@ -183,7 +183,22 @@
                                                 <option value="5">5 (高)</option>
                                             </select>
                                         </div>
-                                        
+
+                                        <div class="mb-3">
+                                            <label for="proxyInput" class="form-label">代理服务器 (可选)</label>
+                                            <input type="text" id="proxyInput" class="form-control" placeholder="http://127.0.0.1:7890">
+                                            <small class="text-muted">支持 HTTP/HTTPS/SOCKS5 代理</small>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="useBrowserMode">
+                                                <label class="form-check-label" for="useBrowserMode">
+                                                    浏览器模式 (处理 JS 渲染页面)
+                                                </label>
+                                            </div>
+                                        </div>
+
                                         <div class="d-grid gap-2">
                                             <button type="button" id="runBtn" class="btn btn-primary">运行爬虫</button>
                                             <button type="button" id="generateBtn" class="btn btn-outline-primary">生成配置文件</button>

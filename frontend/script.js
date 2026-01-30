@@ -100,12 +100,16 @@ document.addEventListener('DOMContentLoaded', function() {
             const crawlDepth = document.getElementById('crawlDepth').value;
             const storageFormat = document.querySelector('input[name="storageFormat"]:checked').value;
             const concurrency = document.getElementById('concurrency').value;
-            
+            const proxyUrl = document.getElementById('proxyInput')?.value?.trim() || '';
+            const useBrowserMode = document.getElementById('useBrowserMode')?.checked || false;
+
             const config = {
                 urls: urlList,
                 depth: parseInt(crawlDepth),
                 format: storageFormat,
                 concurrency: parseInt(concurrency),
+                proxy: proxyUrl || null,
+                use_browser: useBrowserMode,
                 enable_urban_legend: true,
                 timestamp: new Date().toISOString()
             };
