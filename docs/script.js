@@ -4476,39 +4476,48 @@ function generateWikiCategoryTree(rootCategory) {
             
             myChart.setOption(option);
 
-            // 保存图表实例
+            // 保存图表实例和原始配置
             window.wikiCategoryTreeChart = myChart;
+            window.wikiCategoryTreeOption = option;
 
             // 添加缩放按钮
             const zoomControls = document.createElement('div');
             zoomControls.className = 'chart-zoom-controls';
             zoomControls.style.cssText = 'position:absolute;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:5px;';
             zoomControls.innerHTML = `
-                <button class="btn btn-sm btn-outline-secondary" id="tree-zoom-in" title="放大">
+                <button class="btn btn-sm btn-outline-secondary tree-zoom-in" title="放大">
                     <i class="bi bi-plus-lg"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-secondary" id="tree-zoom-reset" title="重置">
+                <button class="btn btn-sm btn-outline-secondary tree-zoom-reset" title="重置">
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-secondary" id="tree-zoom-out" title="缩小">
+                <button class="btn btn-sm btn-outline-secondary tree-zoom-out" title="缩小">
                     <i class="bi bi-dash-lg"></i>
                 </button>
             `;
             container.style.position = 'relative';
             container.appendChild(zoomControls);
 
+            // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
+            const chartInstance = myChart;
+            const chartOption = option;
             let currentZoom = 0.9;
-            document.getElementById('tree-zoom-in')?.addEventListener('click', () => {
+
+            zoomControls.querySelector('.tree-zoom-in').addEventListener('click', () => {
                 currentZoom = Math.min(currentZoom * 1.3, 5);
-                myChart.setOption({ series: [{ zoom: currentZoom }] });
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
             });
-            document.getElementById('tree-zoom-out')?.addEventListener('click', () => {
+            zoomControls.querySelector('.tree-zoom-out').addEventListener('click', () => {
                 currentZoom = Math.max(currentZoom / 1.3, 0.2);
-                myChart.setOption({ series: [{ zoom: currentZoom }] });
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
             });
-            document.getElementById('tree-zoom-reset')?.addEventListener('click', () => {
+            zoomControls.querySelector('.tree-zoom-reset').addEventListener('click', () => {
                 currentZoom = 0.9;
-                myChart.setOption({ series: [{ zoom: currentZoom, center: null }] });
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({ type: 'restore' });
             });
 
             // 添加窗口大小变化时的自适应调整
@@ -4780,40 +4789,48 @@ function findWikiPagePath(sourcePage, targetPage) {
             
             myChart.setOption(option);
 
-            // 保存图表实例
+            // 保存图表实例和原始配置
             window.wikiPagePathChart = myChart;
+            window.wikiPagePathOption = option;
 
             // 添加缩放按钮
             const zoomControls = document.createElement('div');
             zoomControls.className = 'chart-zoom-controls';
             zoomControls.style.cssText = 'position:absolute;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:5px;';
             zoomControls.innerHTML = `
-                <button class="btn btn-sm btn-outline-secondary" id="path-zoom-in" title="放大">
+                <button class="btn btn-sm btn-outline-secondary path-zoom-in" title="放大">
                     <i class="bi bi-plus-lg"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-secondary" id="path-zoom-reset" title="重置">
+                <button class="btn btn-sm btn-outline-secondary path-zoom-reset" title="重置">
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-secondary" id="path-zoom-out" title="缩小">
+                <button class="btn btn-sm btn-outline-secondary path-zoom-out" title="缩小">
                     <i class="bi bi-dash-lg"></i>
                 </button>
             `;
             container.style.position = 'relative';
             container.appendChild(zoomControls);
 
+            // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
+            const chartInstance = myChart;
+            const chartOption = option;
             let currentZoom = 1.2;
-            document.getElementById('path-zoom-in')?.addEventListener('click', () => {
+
+            zoomControls.querySelector('.path-zoom-in').addEventListener('click', () => {
                 currentZoom = Math.min(currentZoom * 1.3, 5);
-                myChart.setOption({ series: [{ zoom: currentZoom }] });
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
             });
-            document.getElementById('path-zoom-out')?.addEventListener('click', () => {
+            zoomControls.querySelector('.path-zoom-out').addEventListener('click', () => {
                 currentZoom = Math.max(currentZoom / 1.3, 0.3);
-                myChart.setOption({ series: [{ zoom: currentZoom }] });
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
             });
-            document.getElementById('path-zoom-reset')?.addEventListener('click', () => {
+            zoomControls.querySelector('.path-zoom-reset').addEventListener('click', () => {
                 currentZoom = 1.2;
-                myChart.setOption({ series: [{ zoom: currentZoom }] });
-                myChart.dispatchAction({ type: 'restore' });
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({ type: 'restore' });
             });
 
             // 添加窗口大小变化时的自适应调整
