@@ -4431,22 +4431,32 @@ function generateWikiCategoryTree(rootCategory) {
                 },
                 tooltip: {
                     formatter: function(params) {
-                        return `<div>${params.data.name}</div>`;
+                        return `<div style="max-width:200px;word-wrap:break-word;">${params.data.name}</div>`;
                     }
+                },
+                toolbox: {
+                    show: true,
+                    feature: {
+                        restore: { title: '还原' },
+                        saveAsImage: { title: '保存图片' }
+                    },
+                    right: 20,
+                    top: 20
                 },
                 series: [{
                     type: 'tree',
                     data: [treeDataForECharts],
-                    top: '10%',
-                    left: '8%',
-                    bottom: '22%',
-                    right: '20%',
-                    symbolSize: 7,
+                    top: '12%',
+                    left: '10%',
+                    bottom: '14%',
+                    right: '25%',
+                    symbolSize: 10,
                     label: {
                         position: 'left',
                         verticalAlign: 'middle',
                         align: 'right',
-                        fontSize: 12
+                        fontSize: 13,
+                        color: '#333'
                     },
                     leaves: {
                         label: {
@@ -4458,14 +4468,57 @@ function generateWikiCategoryTree(rootCategory) {
                     initialTreeDepth: 2,
                     expandAndCollapse: true,
                     animationDuration: 550,
-                    animationDurationUpdate: 750
+                    animationDurationUpdate: 750,
+                    roam: true,  // 启用鼠标缩放和拖拽
+                    zoom: 0.9
                 }]
             };
             
             myChart.setOption(option);
 
-            // 保存图表实例
+            // 保存图表实例和原始配置
             window.wikiCategoryTreeChart = myChart;
+            window.wikiCategoryTreeOption = option;
+
+            // 添加缩放按钮
+            const zoomControls = document.createElement('div');
+            zoomControls.className = 'chart-zoom-controls';
+            zoomControls.style.cssText = 'position:absolute;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:5px;';
+            zoomControls.innerHTML = `
+                <button class="btn btn-sm btn-outline-secondary tree-zoom-in" title="放大">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary tree-zoom-reset" title="重置">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary tree-zoom-out" title="缩小">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+            `;
+            container.style.position = 'relative';
+            container.appendChild(zoomControls);
+
+            // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
+            const chartInstance = myChart;
+            const chartOption = option;
+            let currentZoom = 0.9;
+
+            zoomControls.querySelector('.tree-zoom-in').addEventListener('click', () => {
+                currentZoom = Math.min(currentZoom * 1.3, 5);
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+            });
+            zoomControls.querySelector('.tree-zoom-out').addEventListener('click', () => {
+                currentZoom = Math.max(currentZoom / 1.3, 0.2);
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+            });
+            zoomControls.querySelector('.tree-zoom-reset').addEventListener('click', () => {
+                currentZoom = 0.9;
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({ type: 'restore' });
+            });
 
             // 添加窗口大小变化时的自适应调整
             window.addEventListener('resize', function() {
@@ -4531,56 +4584,131 @@ function findWikiPagePath(sourcePage, targetPage) {
     // 获取可视化容器
     const container = document.getElementById('wiki-visualization-container');
     if (!container) return;
-    
+
     // 获取选中的语言
     const language = document.getElementById('wiki-language-selector').value || 'zh';
-    
-    // 显示加载中状态
+
+    // 显示加载中状态（带预计时间提示）
     container.innerHTML = `
         <div class="text-center py-5">
             <div class="spinner-border" role="status">
                 <span class="visually-hidden">加载中...</span>
             </div>
-            <p class="mt-2">正在查找页面路径，这可能需要一些时间...</p>
+            <p class="mt-2">正在查找页面路径...</p>
+            <p class="text-muted small">搜索可能需要30-60秒，请耐心等待</p>
+            <p class="text-muted small" id="path-search-timer">已用时: 0秒</p>
         </div>
     `;
-    
+
+    // 显示计时器
+    const startTime = Date.now();
+    const timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const timerEl = document.getElementById('path-search-timer');
+        if (timerEl) {
+            timerEl.textContent = `已用时: ${elapsed}秒`;
+        }
+    }, 1000);
+
     // 调用API查找路径
     ApiClient.findWikiPagePath(sourcePage, targetPage, { language: language })
         .then(result => {
-            if (!result || !result.path || result.path.length === 0) {
+            clearInterval(timerInterval);
+
+            // 未找到路径
+            if (!result.found) {
+                let alertClass = 'alert-warning';
+                let icon = 'bi-exclamation-triangle';
+                let extraInfo = '';
+
+                if (result.stop_reason === 'timeout') {
+                    alertClass = 'alert-info';
+                    icon = 'bi-clock';
+                } else if (result.stop_reason === 'page_limit') {
+                    alertClass = 'alert-info';
+                    icon = 'bi-info-circle';
+                }
+
+                if (result.suggestion) {
+                    extraInfo = `<p class="small text-muted mt-2">${result.suggestion}</p>`;
+                }
+
                 container.innerHTML = `
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle"></i> 未能找到从"${sourcePage}"到"${targetPage}"的路径
+                    <div class="${alertClass} alert">
+                        <i class="bi ${icon}"></i> ${result.message || '未找到路径'}
+                        <br><small>搜索了 ${result.pages_searched || 0} 个页面，用时 ${result.time_spent || 0} 秒</small>
+                        ${extraInfo}
+                        <hr>
+                        <button class="btn btn-sm btn-outline-primary" id="retry-path-search">
+                            <i class="bi bi-arrow-clockwise"></i> 重新搜索
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" id="change-path-params">
+                            <i class="bi bi-pencil"></i> 修改关键词
+                        </button>
                     </div>
                 `;
+
+                // 绑定重试按钮
+                document.getElementById('retry-path-search')?.addEventListener('click', () => {
+                    findWikiPagePath(sourcePage, targetPage);
+                });
+
+                // 绑定修改关键词按钮
+                document.getElementById('change-path-params')?.addEventListener('click', () => {
+                    document.getElementById('wiki-path-source')?.focus();
+                    container.innerHTML = '<div class="alert alert-info">请修改上方的源页面或目标页面，然后点击"查找路径"</div>';
+                });
+
                 return;
             }
-            
-            // 渲染路径
+
+            // 找到路径，渲染结果
             renderPagePath(result, container);
         })
         .catch(error => {
+            clearInterval(timerInterval);
             container.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-circle"></i> 查找路径失败: ${error.message || '未知错误'}
+                    <hr>
+                    <button class="btn btn-sm btn-outline-primary" id="retry-path-search-error">
+                        <i class="bi bi-arrow-clockwise"></i> 重试
+                    </button>
                 </div>
             `;
+            document.getElementById('retry-path-search-error')?.addEventListener('click', () => {
+                findWikiPagePath(sourcePage, targetPage);
+            });
         });
     
     // 渲染页面路径
     function renderPagePath(pathData, container) {
+        // 路径可能是字符串数组或对象数组，统一处理
+        const pathArray = pathData.path.map(item => typeof item === 'string' ? item : item.title);
+
+        // 先显示文字路径
+        const pathText = pathArray.join(' → ');
+        const statsText = pathData.pages_searched ? `（搜索了 ${pathData.pages_searched} 个页面）` : '';
+
         // 如果有ECharts库
         if (typeof echarts !== 'undefined') {
+            // 清空容器并设置高度
+            container.innerHTML = '';
+            container.style.height = '400px';
+
+            // 销毁旧实例
+            const existingChart = echarts.getInstanceByDom(container);
+            if (existingChart) existingChart.dispose();
+
             // 使用ECharts渲染路径图
             const myChart = echarts.init(container);
-            
+
             // 准备节点和链接数据
-            const nodes = pathData.path.map((page, index) => ({
+            const nodes = pathArray.map((page, index) => ({
                 id: index,
-                name: page.title,
-                value: index === 0 || index === pathData.path.length - 1 ? 2 : 1,
-                category: index === 0 ? 0 : (index === pathData.path.length - 1 ? 1 : 2)
+                name: page,
+                value: index === 0 || index === pathArray.length - 1 ? 2 : 1,
+                category: index === 0 ? 0 : (index === pathArray.length - 1 ? 1 : 2)
             }));
             
             const links = [];
@@ -4593,20 +4721,29 @@ function findWikiPagePath(sourcePage, targetPage) {
             
             const option = {
                 title: {
-                    text: `维基百科页面路径: ${sourcePage} → ${targetPage}`,
-                    subtext: `路径长度: ${pathData.path.length - 1} 步`,
+                    text: `维基百科页面路径: ${pathArray[0]} → ${pathArray[pathArray.length - 1]}`,
+                    subtext: `路径长度: ${pathArray.length - 1} 步 ${statsText}\n提示: 鼠标滚轮缩放，拖拽移动`,
                     left: 'center'
                 },
                 tooltip: {
                     formatter: function(params) {
-                        return `<div>${params.data.name}</div>`;
+                        return `<div style="max-width:200px;word-wrap:break-word;">${params.data.name}</div>`;
                     }
+                },
+                toolbox: {
+                    show: true,
+                    feature: {
+                        restore: { title: '还原' },
+                        saveAsImage: { title: '保存图片' }
+                    },
+                    right: 20,
+                    top: 60
                 },
                 legend: {
                     data: ['起点', '终点', '中间节点'],
                     orient: 'vertical',
                     right: 10,
-                    top: 20
+                    top: 100
                 },
                 series: [{
                     name: '页面路径',
@@ -4616,10 +4753,12 @@ function findWikiPagePath(sourcePage, targetPage) {
                         id: node.id,
                         name: node.name,
                         value: node.value,
-                        symbolSize: node.value === 2 ? 20 : 15,
+                        symbolSize: node.value === 2 ? 40 : 30,
                         category: node.category,
                         label: {
-                            show: true
+                            show: true,
+                            fontSize: 14,
+                            fontWeight: node.value === 2 ? 'bold' : 'normal'
                         }
                     })),
                     links: links,
@@ -4629,60 +4768,107 @@ function findWikiPagePath(sourcePage, targetPage) {
                         { name: '中间节点' }
                     ],
                     roam: true,
+                    zoom: 1.2,
                     force: {
-                        repulsion: 100,
-                        edgeLength: 100
+                        repulsion: 200,
+                        edgeLength: 150
                     },
                     lineStyle: {
                         color: 'source',
-                        curveness: 0.3
+                        curveness: 0.3,
+                        width: 3
                     },
                     emphasis: {
                         focus: 'adjacency',
                         lineStyle: {
-                            width: 4
+                            width: 5
                         }
                     }
                 }]
             };
             
             myChart.setOption(option);
-            
-            // 保存图表实例
+
+            // 保存图表实例和原始配置
             window.wikiPagePathChart = myChart;
-            
+            window.wikiPagePathOption = option;
+
+            // 添加缩放按钮
+            const zoomControls = document.createElement('div');
+            zoomControls.className = 'chart-zoom-controls';
+            zoomControls.style.cssText = 'position:absolute;right:20px;bottom:20px;z-index:100;display:flex;flex-direction:column;gap:5px;';
+            zoomControls.innerHTML = `
+                <button class="btn btn-sm btn-outline-secondary path-zoom-in" title="放大">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary path-zoom-reset" title="重置">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary path-zoom-out" title="缩小">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+            `;
+            container.style.position = 'relative';
+            container.appendChild(zoomControls);
+
+            // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
+            const chartInstance = myChart;
+            const chartOption = option;
+            let currentZoom = 1.2;
+
+            zoomControls.querySelector('.path-zoom-in').addEventListener('click', () => {
+                currentZoom = Math.min(currentZoom * 1.3, 5);
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+            });
+            zoomControls.querySelector('.path-zoom-out').addEventListener('click', () => {
+                currentZoom = Math.max(currentZoom / 1.3, 0.3);
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+            });
+            zoomControls.querySelector('.path-zoom-reset').addEventListener('click', () => {
+                currentZoom = 1.2;
+                chartOption.series[0].zoom = currentZoom;
+                chartInstance.setOption(chartOption, { notMerge: false, replaceMerge: ['series'] });
+                chartInstance.dispatchAction({ type: 'restore' });
+            });
+
             // 添加窗口大小变化时的自适应调整
             window.addEventListener('resize', function() {
-                myChart.resize();
+                if (myChart && !myChart.isDisposed()) {
+                    myChart.resize();
+                }
             });
         } else {
             // 备用方案：显示简单的路径
+            const lang = document.getElementById('wiki-language-selector')?.value || 'zh';
             let html = `
                 <div class="wiki-path-container">
-                    <h4>从 "${sourcePage}" 到 "${targetPage}" 的路径</h4>
-                    <p>路径长度: ${pathData.path.length - 1} 步</p>
+                    <h4>从 "${pathArray[0]}" 到 "${pathArray[pathArray.length - 1]}" 的路径</h4>
+                    <p>路径长度: ${pathArray.length - 1} 步 ${statsText}</p>
                     <div class="wiki-path">
             `;
-            
-            pathData.path.forEach((page, index) => {
+
+            pathArray.forEach((pageTitle, index) => {
+                const pageUrl = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(pageTitle)}`;
                 html += `
                     <div class="wiki-path-node">
                         <div class="wiki-path-icon">
-                            ${index === 0 ? '<i class="bi bi-house-fill"></i>' : 
-                              (index === pathData.path.length - 1 ? '<i class="bi bi-flag-fill"></i>' : 
+                            ${index === 0 ? '<i class="bi bi-house-fill"></i>' :
+                              (index === pathArray.length - 1 ? '<i class="bi bi-flag-fill"></i>' :
                                `<span class="step-number">${index}</span>`)}
                         </div>
                         <div class="wiki-path-content">
-                            <div class="wiki-path-title">${page.title}</div>
+                            <div class="wiki-path-title">${pageTitle}</div>
                             <div class="wiki-path-url">
-                                <a href="${page.url}" target="_blank">${page.url}</a>
+                                <a href="${pageUrl}" target="_blank">查看页面</a>
                             </div>
                         </div>
                     </div>
                 `;
-                
+
                 // 添加连接线（除了最后一个节点）
-                if (index < pathData.path.length - 1) {
+                if (index < pathArray.length - 1) {
                     html += '<div class="wiki-path-connector"><i class="bi bi-arrow-down"></i></div>';
                 }
             });
