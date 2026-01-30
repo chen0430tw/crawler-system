@@ -4907,28 +4907,27 @@ if (window.ApiClient) {
         }
     };
     
-    // 获取维基百科分类树（继续）
+    // 获取维基百科分类树（使用 POST 避免中文编码问题）
     ApiClient.getWikiCategoryTree = async function(rootCategory, options = {}) {
         try {
-            const params = new URLSearchParams({
-                category: rootCategory,
-                language: options.language || 'zh',
-                depth: options.depth || 2,
-                include_pages: options.include_pages ? 1 : 0
-            });
-            
-            const response = await fetch(`${API_BASE_URL}/wiki/category-tree?${params.toString()}`, {
-                method: 'GET',
+            const response = await fetch(`${API_BASE_URL}/wiki/category-tree`, {
+                method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
-                }
+                    'Content-Type': 'application/json; charset=utf-8'
+                },
+                body: JSON.stringify({
+                    rootCategory: rootCategory,
+                    language: options.language || 'zh',
+                    depth: options.depth || 2,
+                    includePages: options.include_pages || false
+                })
             });
-            
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || '获取分类树失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('获取维基百科分类树出错:', error);
@@ -4942,7 +4941,7 @@ if (window.ApiClient) {
             const response = await fetch(`${API_BASE_URL}/wiki/path`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json; charset=utf-8'
                 },
                 body: JSON.stringify({
                     source: sourcePage,

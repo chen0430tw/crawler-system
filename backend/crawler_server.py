@@ -811,12 +811,14 @@ def wiki_get_category_tree():
 def wiki_find_path():
     """
     查找两个维基百科页面之间的链接路径
+    使用双向 BFS 优化搜索速度
     参数 (JSON):
         source: 源页面标题
         target: 目标页面标题
         language: 语言 (默认 zh)
     """
     import requests as req
+    import time
 
     data = request.get_json() or {}
     source = data.get('source', '')
@@ -835,65 +837,90 @@ def wiki_find_path():
             'Accept': 'application/json'
         }
 
-        # 使用 BFS 查找路径
-        from collections import deque
+        start_time = time.time()
+        max_time = 30  # 最多搜索30秒
+        max_pages = 200  # 最多访问200个页面
+        pages_visited = 0
 
-        visited = {source}
-        queue = deque([(source, [source])])
-        max_depth = 3  # 限制搜索深度
-        max_links_per_page = 100
-
-        while queue:
-            current, path = queue.popleft()
-
-            if len(path) > max_depth:
-                break
-
-            # 获取当前页面的链接
+        def get_links(page_title):
+            """获取页面的链接"""
             params = {
                 'action': 'query',
-                'titles': current,
+                'titles': page_title,
                 'prop': 'links',
-                'pllimit': max_links_per_page,
+                'pllimit': 50,  # 每个页面只取50个链接
                 'format': 'json'
             }
-
             try:
-                response = req.get(api_url, params=params, headers=headers, timeout=10)
+                response = req.get(api_url, params=params, headers=headers, timeout=5)
                 result = response.json()
-
                 pages = result.get('query', {}).get('pages', {})
                 for page_data in pages.values():
-                    links = page_data.get('links', [])
-                    for link in links:
-                        link_title = link.get('title', '')
+                    return [link.get('title', '') for link in page_data.get('links', [])]
+            except:
+                pass
+            return []
 
-                        if link_title == target:
-                            # 找到目标
-                            final_path = path + [link_title]
+        # 双向 BFS
+        from collections import deque
+
+        # 前向搜索（从source开始）
+        forward_visited = {source: [source]}
+        forward_queue = deque([source])
+
+        # 反向搜索（从target开始）- 使用 linkshere 获取指向该页面的链接
+        backward_visited = {target: [target]}
+        backward_queue = deque([target])
+
+        while (forward_queue or backward_queue) and pages_visited < max_pages:
+            # 检查时间限制
+            if time.time() - start_time > max_time:
+                break
+
+            # 前向搜索一步
+            if forward_queue:
+                current = forward_queue.popleft()
+                pages_visited += 1
+
+                for link in get_links(current):
+                    if link in backward_visited:
+                        # 找到交汇点
+                        forward_path = forward_visited[current] + [link]
+                        backward_path = backward_visited[link]
+                        full_path = forward_path[:-1] + backward_path[::-1]
+                        return jsonify({
+                            'found': True,
+                            'path': full_path,
+                            'length': len(full_path),
+                            'source': source,
+                            'target': target,
+                            'pages_searched': pages_visited
+                        })
+
+                    if link not in forward_visited and len(forward_visited[current]) < 3:
+                        forward_visited[link] = forward_visited[current] + [link]
+                        forward_queue.append(link)
+
+                        # 直接命中目标
+                        if link == target:
                             return jsonify({
                                 'found': True,
-                                'path': final_path,
-                                'length': len(final_path),
+                                'path': forward_visited[link],
+                                'length': len(forward_visited[link]),
                                 'source': source,
-                                'target': target
+                                'target': target,
+                                'pages_searched': pages_visited
                             })
-
-                        if link_title not in visited and len(path) < max_depth:
-                            visited.add(link_title)
-                            queue.append((link_title, path + [link_title]))
-
-            except Exception as e:
-                logger.warning(f"获取页面链接失败 {current}: {str(e)}")
-                continue
 
         # 未找到路径
         return jsonify({
             'found': False,
             'path': [],
-            'message': f'在 {max_depth} 步内未找到从 "{source}" 到 "{target}" 的路径',
+            'message': f'在限制内未找到从 "{source}" 到 "{target}" 的路径（已搜索 {pages_visited} 个页面）',
             'source': source,
-            'target': target
+            'target': target,
+            'pages_searched': pages_visited,
+            'time_spent': round(time.time() - start_time, 2)
         })
 
     except Exception as e:
