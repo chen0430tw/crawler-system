@@ -26,8 +26,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // 添加任务列表引用
     const taskListContainer = document.getElementById('taskList');
     
-    // 存储爬虫结果
+    // 存储爬虫结果 (同时暴露到 window 供可视化使用)
     let crawlerResults = null;
+    Object.defineProperty(window, 'crawlerResults', {
+        get: () => crawlerResults,
+        set: (val) => { crawlerResults = val; }
+    });
     let selectedUrlIndex = null;
     let selectedCategoryId = null;
     
@@ -4996,6 +5000,19 @@ if (window.ApiClient) {
     // 注意：searchWiki, getRandomWikiPages, submitWikiTask, cancelWikiTask
     // 已在 api_client.js 中正确定义，不要在这里重复定义
 
+    // 安全解析 JSON 响应的辅助函数
+    async function safeParseJson(response, defaultError) {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            try {
+                return await response.json();
+            } catch (e) {
+                return { error: defaultError };
+            }
+        }
+        return { error: `${defaultError} (HTTP ${response.status})` };
+    }
+
     // 提交维基百科爬取任务（如果 api_client.js 中没有定义）
     if (!ApiClient.submitWikiTask) ApiClient.submitWikiTask = async function(config) {
         try {
@@ -5006,12 +5023,12 @@ if (window.ApiClient) {
                 },
                 body: JSON.stringify(config)
             });
-            
+
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '提交任务失败');
                 throw new Error(errorData.error || '提交任务失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('提交维基百科爬取任务出错:', error);
@@ -5028,12 +5045,12 @@ if (window.ApiClient) {
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '获取任务状态失败');
                 throw new Error(errorData.error || '获取任务状态失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('获取维基百科任务状态出错:', error);
@@ -5050,12 +5067,12 @@ if (window.ApiClient) {
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '获取任务结果失败');
                 throw new Error(errorData.error || '获取任务结果失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('获取维基百科任务结果出错:', error);
@@ -5072,9 +5089,9 @@ if (window.ApiClient) {
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '取消任务失败');
                 throw new Error(errorData.error || '取消任务失败');
             }
             
@@ -5096,10 +5113,10 @@ if (window.ApiClient) {
             });
             
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '获取任务列表失败');
                 throw new Error(errorData.error || '获取任务列表失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('获取维基百科任务列表出错:', error);
@@ -5124,10 +5141,10 @@ if (window.ApiClient) {
             });
             
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '提取结构化信息失败');
                 throw new Error(errorData.error || '提取结构化信息失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('提取维基百科结构化信息出错:', error);
@@ -5146,10 +5163,10 @@ if (window.ApiClient) {
             });
             
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '获取语言列表失败');
                 throw new Error(errorData.error || '获取语言列表失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('获取维基百科语言列表出错:', error);
@@ -5174,7 +5191,7 @@ if (window.ApiClient) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '获取分类树失败');
                 throw new Error(errorData.error || '获取分类树失败');
             }
 
@@ -5199,12 +5216,12 @@ if (window.ApiClient) {
                     language: options.language || 'zh'
                 })
             });
-            
+
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await safeParseJson(response, '查找路径失败');
                 throw new Error(errorData.error || '查找路径失败');
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('查找维基百科页面路径出错:', error);
@@ -5239,7 +5256,7 @@ function initWikiVisualization() {
         pathFindBtn.addEventListener('click', function() {
             const sourcePage = document.getElementById('wiki-path-source').value.trim();
             const targetPage = document.getElementById('wiki-path-target').value.trim();
-            
+
             if (sourcePage && targetPage) {
                 findWikiPagePath(sourcePage, targetPage);
             } else {
@@ -5253,5 +5270,364 @@ function initWikiVisualization() {
         });
     }
 }
+
+// 31. 数据可视化功能
+function initDataVisualization() {
+    const vizContainer = document.getElementById('vizContainer');
+    const wordcloudBtn = document.getElementById('viz-wordcloud-btn');
+    const linkgraphBtn = document.getElementById('viz-linkgraph-btn');
+    const statsBtn = document.getElementById('viz-stats-btn');
+
+    if (!vizContainer) return;
+
+    let vizChart = null;
+    let currentVizType = 'wordcloud';
+
+    // 切换按钮激活状态
+    function setActiveBtn(activeBtn) {
+        [wordcloudBtn, linkgraphBtn, statsBtn].forEach(btn => {
+            if (btn) btn.classList.remove('active');
+        });
+        if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    // 从爬虫结果提取关键词和词频
+    function extractKeywords(results) {
+        if (!results || !results.pages) return [];
+
+        const wordCount = {};
+        // 中文分词简化处理 - 提取2-4字词组
+        const chinesePattern = /[\u4e00-\u9fa5]{2,4}/g;
+        // 英文单词
+        const englishPattern = /[a-zA-Z]{3,}/g;
+
+        // 停用词列表
+        const stopWords = new Set(['的', '是', '在', '了', '和', '与', '或', '对', '为', '有', '等', '被',
+            '将', '也', '都', '到', '从', '但', '可', '这', '那', '就', '而', '以', '及', '中', '上', '下',
+            'the', 'and', 'is', 'in', 'to', 'of', 'a', 'for', 'on', 'with', 'as', 'at', 'by', 'an', 'be',
+            '可以', '进行', '通过', '使用', '没有', '因为', '如果', '这个', '那个', '他们', '我们', '自己']);
+
+        results.pages.forEach(page => {
+            // 处理标题
+            if (page.title) {
+                const titleWords = page.title.match(chinesePattern) || [];
+                const titleEnWords = page.title.match(englishPattern) || [];
+                [...titleWords, ...titleEnWords].forEach(word => {
+                    if (!stopWords.has(word.toLowerCase())) {
+                        wordCount[word] = (wordCount[word] || 0) + 3; // 标题权重较高
+                    }
+                });
+            }
+
+            // 处理内容
+            if (page.content) {
+                // 移除HTML标签
+                const text = page.content.replace(/<[^>]+>/g, ' ');
+                const contentWords = text.match(chinesePattern) || [];
+                const contentEnWords = text.match(englishPattern) || [];
+                [...contentWords, ...contentEnWords].forEach(word => {
+                    if (!stopWords.has(word.toLowerCase())) {
+                        wordCount[word] = (wordCount[word] || 0) + 1;
+                    }
+                });
+            }
+        });
+
+        // 转换为数组并排序
+        return Object.entries(wordCount)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 100); // 取前100个高频词
+    }
+
+    // 从爬虫结果提取链接关系
+    function extractLinks(results) {
+        if (!results || !results.pages) return { nodes: [], links: [] };
+
+        const nodes = [];
+        const nodeMap = {};
+        const links = [];
+
+        results.pages.forEach((page, index) => {
+            const url = page.url || `page_${index}`;
+            const title = page.title || url;
+            const shortTitle = title.length > 15 ? title.substring(0, 15) + '...' : title;
+
+            nodeMap[url] = nodes.length;
+            nodes.push({
+                id: index,
+                name: shortTitle,
+                fullTitle: title,
+                url: url,
+                symbolSize: Math.min(30 + (page.content?.length || 0) / 500, 60),
+                category: page.category || 0
+            });
+        });
+
+        // 提取页面间的链接关系
+        results.pages.forEach((page, sourceIndex) => {
+            if (page.content) {
+                // 查找内容中指向其他已爬取页面的链接
+                results.pages.forEach((targetPage, targetIndex) => {
+                    if (sourceIndex !== targetIndex && targetPage.url) {
+                        if (page.content.includes(targetPage.url) ||
+                            (targetPage.title && page.content.includes(targetPage.title))) {
+                            links.push({
+                                source: sourceIndex,
+                                target: targetIndex
+                            });
+                        }
+                    }
+                });
+            }
+        });
+
+        return { nodes, links };
+    }
+
+    // 渲染词云
+    function renderWordCloud(keywords) {
+        if (!keywords || keywords.length === 0) {
+            vizContainer.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">没有可用的关键词数据</p></div>';
+            return;
+        }
+
+        if (vizChart) {
+            vizChart.dispose();
+        }
+
+        vizChart = echarts.init(vizContainer);
+
+        // 计算字体大小范围
+        const maxValue = keywords[0]?.value || 1;
+        const minValue = keywords[keywords.length - 1]?.value || 1;
+
+        const option = {
+            title: {
+                text: '关键词词云',
+                left: 'center',
+                textStyle: { fontSize: 16, fontWeight: 'normal' }
+            },
+            tooltip: {
+                show: true,
+                formatter: function(params) {
+                    return `${params.name}: ${params.value}次`;
+                }
+            },
+            series: [{
+                type: 'wordCloud',
+                shape: 'circle',
+                left: 'center',
+                top: 'center',
+                width: '90%',
+                height: '85%',
+                sizeRange: [14, 60],
+                rotationRange: [-45, 45],
+                rotationStep: 15,
+                gridSize: 8,
+                drawOutOfBound: false,
+                textStyle: {
+                    fontFamily: 'sans-serif',
+                    fontWeight: 'bold',
+                    color: function() {
+                        const colors = ['#1890ff', '#2fc25b', '#facc14', '#e6522d', '#8543e0', '#13c2c2', '#fa8c16'];
+                        return colors[Math.floor(Math.random() * colors.length)];
+                    }
+                },
+                emphasis: {
+                    textStyle: {
+                        shadowBlur: 10,
+                        shadowColor: '#333'
+                    }
+                },
+                data: keywords
+            }]
+        };
+
+        vizChart.setOption(option);
+    }
+
+    // 渲染链接关系图
+    function renderLinkGraph(graphData) {
+        if (!graphData || graphData.nodes.length === 0) {
+            vizContainer.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">没有可用的链接数据</p></div>';
+            return;
+        }
+
+        if (vizChart) {
+            vizChart.dispose();
+        }
+
+        vizChart = echarts.init(vizContainer);
+
+        const option = {
+            title: {
+                text: '页面链接关系图',
+                left: 'center',
+                textStyle: { fontSize: 16, fontWeight: 'normal' }
+            },
+            tooltip: {
+                formatter: function(params) {
+                    if (params.dataType === 'node') {
+                        return `<strong>${params.data.fullTitle || params.data.name}</strong><br/>
+                                <span style="color:#999">${params.data.url}</span>`;
+                    }
+                    return '';
+                }
+            },
+            series: [{
+                type: 'graph',
+                layout: 'force',
+                roam: true,
+                draggable: true,
+                label: {
+                    show: true,
+                    position: 'right',
+                    fontSize: 10
+                },
+                force: {
+                    repulsion: 300,
+                    gravity: 0.1,
+                    edgeLength: [80, 200]
+                },
+                lineStyle: {
+                    color: '#aaa',
+                    width: 1,
+                    curveness: 0.3
+                },
+                emphasis: {
+                    focus: 'adjacency',
+                    lineStyle: { width: 3 }
+                },
+                data: graphData.nodes,
+                links: graphData.links
+            }]
+        };
+
+        vizChart.setOption(option);
+    }
+
+    // 渲染词频统计柱状图
+    function renderWordStats(keywords) {
+        if (!keywords || keywords.length === 0) {
+            vizContainer.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">没有可用的词频数据</p></div>';
+            return;
+        }
+
+        if (vizChart) {
+            vizChart.dispose();
+        }
+
+        vizChart = echarts.init(vizContainer);
+
+        const top20 = keywords.slice(0, 20);
+
+        const option = {
+            title: {
+                text: '高频词统计 (Top 20)',
+                left: 'center',
+                textStyle: { fontSize: 16, fontWeight: 'normal' }
+            },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' }
+            },
+            grid: {
+                left: '15%',
+                right: '5%',
+                bottom: '5%',
+                top: '15%',
+                containLabel: true
+            },
+            xAxis: {
+                type: 'value',
+                name: '出现次数'
+            },
+            yAxis: {
+                type: 'category',
+                data: top20.map(k => k.name).reverse(),
+                axisLabel: { fontSize: 11 }
+            },
+            series: [{
+                name: '词频',
+                type: 'bar',
+                data: top20.map(k => k.value).reverse(),
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                        { offset: 0, color: '#83bff6' },
+                        { offset: 0.5, color: '#188df0' },
+                        { offset: 1, color: '#188df0' }
+                    ])
+                }
+            }]
+        };
+
+        vizChart.setOption(option);
+    }
+
+    // 更新可视化
+    window.updateVisualization = function(results, type) {
+        if (!results) {
+            vizContainer.innerHTML = '<div class="empty-message text-center py-5"><p class="text-muted">请先上传爬虫结果文件或运行爬虫任务</p></div>';
+            return;
+        }
+
+        currentVizType = type || currentVizType;
+
+        if (currentVizType === 'wordcloud') {
+            const keywords = extractKeywords(results);
+            renderWordCloud(keywords);
+        } else if (currentVizType === 'linkgraph') {
+            const graphData = extractLinks(results);
+            renderLinkGraph(graphData);
+        } else if (currentVizType === 'stats') {
+            const keywords = extractKeywords(results);
+            renderWordStats(keywords);
+        }
+    };
+
+    // 绑定按钮事件
+    if (wordcloudBtn) {
+        wordcloudBtn.addEventListener('click', () => {
+            setActiveBtn(wordcloudBtn);
+            window.updateVisualization(window.crawlerResults, 'wordcloud');
+        });
+    }
+
+    if (linkgraphBtn) {
+        linkgraphBtn.addEventListener('click', () => {
+            setActiveBtn(linkgraphBtn);
+            window.updateVisualization(window.crawlerResults, 'linkgraph');
+        });
+    }
+
+    if (statsBtn) {
+        statsBtn.addEventListener('click', () => {
+            setActiveBtn(statsBtn);
+            window.updateVisualization(window.crawlerResults, 'stats');
+        });
+    }
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', () => {
+        if (vizChart) {
+            vizChart.resize();
+        }
+    });
+
+    // 监听标签页切换
+    const vizTab = document.getElementById('visualization-tab');
+    if (vizTab) {
+        vizTab.addEventListener('shown.bs.tab', () => {
+            if (vizChart) {
+                vizChart.resize();
+            }
+            window.updateVisualization(window.crawlerResults, currentVizType);
+        });
+    }
+}
+
+// 初始化数据可视化
+initDataVisualization();
 
 });
