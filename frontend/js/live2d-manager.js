@@ -37,8 +37,14 @@ function initLive2D() {
                     tools: []  // 不显示工具栏
                 });
 
-                // CDN 脚本会创建 #waifu 元素，等它出现后添加拖动功能
+                // CDN 脚本会创建 #waifu 元素，等它出现后覆盖定位并添加拖动功能
                 waitForElement('#waifu', function(waifuEl) {
+                    // 用 inline style 强制覆盖 CDN 的 left:0 定位到右下角
+                    waifuEl.style.position = 'fixed';
+                    waifuEl.style.right = '20px';
+                    waifuEl.style.bottom = '60px';
+                    waifuEl.style.left = 'auto';
+                    waifuEl.style.zIndex = '500';
                     setupDrag(waifuEl);
                     console.log('看板娘加载完成');
                 });
