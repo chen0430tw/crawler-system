@@ -4512,29 +4512,26 @@ function generateWikiCategoryTree(rootCategory) {
             container.style.position = 'relative';
             container.appendChild(zoomControls);
 
-            // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
+            // 使用闭包绑定按钮事件
             const chartInstance = myChart;
             let currentZoom = 0.9;
 
-            // 使用 treeRoam action 进行缩放，保持当前视图中心
+            // 缩放函数 - 通过修改 series.zoom 实现
+            const updateZoom = (newZoom) => {
+                currentZoom = newZoom;
+                const opt = chartInstance.getOption();
+                opt.series[0].zoom = currentZoom;
+                chartInstance.setOption(opt, { replaceMerge: ['series'] });
+            };
+
             zoomControls.querySelector('.tree-zoom-in').addEventListener('click', () => {
-                currentZoom = Math.min(currentZoom * 1.3, 5);
-                chartInstance.dispatchAction({
-                    type: 'treeRoam',
-                    seriesIndex: 0,
-                    zoom: 1.3  // 相对缩放因子
-                });
+                updateZoom(Math.min(currentZoom * 1.3, 5));
             });
             zoomControls.querySelector('.tree-zoom-out').addEventListener('click', () => {
-                currentZoom = Math.max(currentZoom / 1.3, 0.2);
-                chartInstance.dispatchAction({
-                    type: 'treeRoam',
-                    seriesIndex: 0,
-                    zoom: 1 / 1.3  // 相对缩放因子
-                });
+                updateZoom(Math.max(currentZoom / 1.3, 0.2));
             });
             zoomControls.querySelector('.tree-zoom-reset').addEventListener('click', () => {
-                currentZoom = 0.9;
+                updateZoom(0.9);
                 chartInstance.dispatchAction({ type: 'restore' });
             });
 
@@ -4849,29 +4846,26 @@ function findWikiPagePath(sourcePage, targetPage) {
             container.style.position = 'relative';
             container.appendChild(zoomControls);
 
-            // 使用闭包绑定按钮事件，确保引用正确的 chart 实例
+            // 使用闭包绑定按钮事件
             const chartInstance = myChart;
             let currentZoom = 1.2;
 
-            // 使用 graphRoam action 进行缩放，保持当前视图中心
+            // 缩放函数 - 通过修改 series.zoom 实现
+            const updateZoom = (newZoom) => {
+                currentZoom = newZoom;
+                const opt = chartInstance.getOption();
+                opt.series[0].zoom = currentZoom;
+                chartInstance.setOption(opt, { replaceMerge: ['series'] });
+            };
+
             zoomControls.querySelector('.path-zoom-in').addEventListener('click', () => {
-                currentZoom = Math.min(currentZoom * 1.3, 5);
-                chartInstance.dispatchAction({
-                    type: 'graphRoam',
-                    seriesIndex: 0,
-                    zoom: 1.3  // 相对缩放因子
-                });
+                updateZoom(Math.min(currentZoom * 1.3, 5));
             });
             zoomControls.querySelector('.path-zoom-out').addEventListener('click', () => {
-                currentZoom = Math.max(currentZoom / 1.3, 0.3);
-                chartInstance.dispatchAction({
-                    type: 'graphRoam',
-                    seriesIndex: 0,
-                    zoom: 1 / 1.3  // 相对缩放因子
-                });
+                updateZoom(Math.max(currentZoom / 1.3, 0.3));
             });
             zoomControls.querySelector('.path-zoom-reset').addEventListener('click', () => {
-                currentZoom = 1.2;
+                updateZoom(1.2);
                 chartInstance.dispatchAction({ type: 'restore' });
             });
 
@@ -4937,10 +4931,38 @@ function sanitizeHtml(html) {
     const scripts = tempDiv.querySelectorAll('script');
     scripts.forEach(script => script.remove());
     
-    // 移除所有iframe标签
+    // 移除所有iframe标签（可能包含外部内容）
     const iframes = tempDiv.querySelectorAll('iframe');
     iframes.forEach(iframe => iframe.remove());
-    
+
+    // 处理视频元素 - 添加控件并限制大小
+    const videos = tempDiv.querySelectorAll('video');
+    videos.forEach(video => {
+        // 添加播放控件
+        video.setAttribute('controls', 'true');
+        // 移除自动播放（避免干扰）
+        video.removeAttribute('autoplay');
+        // 设置最大宽度
+        video.style.maxWidth = '100%';
+        video.style.height = 'auto';
+        // 包装在容器中
+        const wrapper = document.createElement('div');
+        wrapper.className = 'video-container';
+        video.parentNode.insertBefore(wrapper, video);
+        wrapper.appendChild(video);
+    });
+
+    // 移除视频播放按钮的无意义文本（如 "Play silent looping video"）
+    const allTextNodes = tempDiv.querySelectorAll('*');
+    allTextNodes.forEach(el => {
+        if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+            const text = el.textContent.trim();
+            if (text.match(/^(Play|Pause)\s+(silent\s+)?(looping\s+)?video$/i)) {
+                el.remove();
+            }
+        }
+    });
+
     // 移除on*事件属性
     const allElements = tempDiv.querySelectorAll('*');
     allElements.forEach(el => {
