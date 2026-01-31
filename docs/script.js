@@ -5300,39 +5300,84 @@ function initDataVisualization() {
         const wordCount = {};
         // 中文分词简化处理 - 提取2-4字词组
         const chinesePattern = /[\u4e00-\u9fa5]{2,4}/g;
-        // 英文单词
-        const englishPattern = /[a-zA-Z]{3,}/g;
+        // 英文单词 (至少4个字母，避免CSS缩写)
+        const englishPattern = /[a-zA-Z]{4,}/g;
 
-        // 停用词列表
-        const stopWords = new Set(['的', '是', '在', '了', '和', '与', '或', '对', '为', '有', '等', '被',
+        // 停用词列表 (包括常见CSS/HTML/JS术语)
+        const stopWords = new Set([
+            // 中文停用词
+            '的', '是', '在', '了', '和', '与', '或', '对', '为', '有', '等', '被',
             '将', '也', '都', '到', '从', '但', '可', '这', '那', '就', '而', '以', '及', '中', '上', '下',
-            'the', 'and', 'is', 'in', 'to', 'of', 'a', 'for', 'on', 'with', 'as', 'at', 'by', 'an', 'be',
             '可以', '进行', '通过', '使用', '没有', '因为', '如果', '这个', '那个', '他们', '我们', '自己',
-            'Google', 'google', 'www', 'com', 'http', 'https', 'html', 'css', 'nbsp']);
+            '一个', '什么', '怎么', '如何', '关于', '更多', '其他', '所有', '一些',
+            // 英文停用词
+            'the', 'and', 'is', 'in', 'to', 'of', 'a', 'for', 'on', 'with', 'as', 'at', 'by', 'an', 'be',
+            'this', 'that', 'from', 'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had',
+            'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall',
+            // 网站/技术术语
+            'google', 'baidu', 'www', 'com', 'http', 'https', 'html', 'css', 'nbsp', 'org', 'net',
+            // CSS属性 (常见)
+            'width', 'height', 'color', 'background', 'margin', 'padding', 'border', 'font',
+            'display', 'position', 'left', 'right', 'top', 'bottom', 'center', 'none',
+            'block', 'inline', 'flex', 'grid', 'absolute', 'relative', 'fixed', 'static',
+            'text', 'align', 'size', 'weight', 'style', 'family', 'line', 'box',
+            'content', 'overflow', 'float', 'clear', 'visibility', 'opacity', 'transform',
+            'transition', 'animation', 'cursor', 'pointer', 'hidden', 'visible', 'auto',
+            'solid', 'dashed', 'dotted', 'radius', 'shadow', 'gradient', 'rgba', 'rgb',
+            'important', 'inherit', 'initial', 'unset', 'normal', 'bold', 'italic',
+            'wrapper', 'container', 'header', 'footer', 'main', 'section', 'article',
+            'nav', 'aside', 'div', 'span', 'img', 'src', 'alt', 'href', 'class', 'id',
+            // JavaScript术语
+            'function', 'var', 'let', 'const', 'return', 'true', 'false', 'null', 'undefined',
+            'new', 'this', 'window', 'document', 'event', 'data', 'type', 'name', 'value',
+            // 其他常见技术词
+            'icon', 'logo', 'image', 'video', 'audio', 'file', 'link', 'button', 'input',
+            'form', 'select', 'option', 'label', 'table', 'list', 'item', 'menu', 'tab',
+            'play', 'pause', 'stop', 'silent', 'looping', 'muted', 'controls',
+            'pixel', 'index', 'number', 'string', 'array', 'object', 'error', 'success',
+            'bdstatic', 'bdimg', 'pmd', 'wrapper', 'newgrid', 'soutu', 'result',
+            'about', 'more', 'next', 'prev', 'page', 'search', 'query', 'param'
+        ]);
 
         pages.forEach(page => {
-            // 处理标题
+            // 处理标题 (优先提取中文)
             if (page.title) {
                 const titleWords = page.title.match(chinesePattern) || [];
-                const titleEnWords = page.title.match(englishPattern) || [];
-                [...titleWords, ...titleEnWords].forEach(word => {
-                    if (!stopWords.has(word.toLowerCase()) && !stopWords.has(word)) {
-                        wordCount[word] = (wordCount[word] || 0) + 3; // 标题权重较高
+                titleWords.forEach(word => {
+                    if (!stopWords.has(word)) {
+                        wordCount[word] = (wordCount[word] || 0) + 5; // 标题中文权重更高
                     }
                 });
             }
 
             // 处理内容
             if (page.content) {
-                // 移除HTML标签
-                const text = page.content.replace(/<[^>]+>/g, ' ');
+                // 移除HTML标签、style标签内容、script标签内容
+                let text = page.content
+                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+                    .replace(/<[^>]+>/g, ' ')
+                    .replace(/\{[^}]*\}/g, ' ')  // 移除CSS样式块 {...}
+                    .replace(/[:\-_#\.\/\\]/g, ' '); // 移除特殊字符
+
+                // 优先提取中文词汇
                 const contentWords = text.match(chinesePattern) || [];
-                const contentEnWords = text.match(englishPattern) || [];
-                [...contentWords, ...contentEnWords].forEach(word => {
-                    if (!stopWords.has(word.toLowerCase()) && !stopWords.has(word)) {
+                contentWords.forEach(word => {
+                    if (!stopWords.has(word)) {
                         wordCount[word] = (wordCount[word] || 0) + 1;
                     }
                 });
+
+                // 只有当中文词汇不够时才添加英文
+                if (Object.keys(wordCount).length < 30) {
+                    const contentEnWords = text.match(englishPattern) || [];
+                    contentEnWords.forEach(word => {
+                        const lower = word.toLowerCase();
+                        if (!stopWords.has(lower) && word.length >= 5) {
+                            wordCount[word] = (wordCount[word] || 0) + 1;
+                        }
+                    });
+                }
             }
         });
 
@@ -5539,14 +5584,16 @@ function initDataVisualization() {
             },
             grid: {
                 left: '15%',
-                right: '5%',
-                bottom: '5%',
+                right: '12%',
+                bottom: '8%',
                 top: '15%',
                 containLabel: true
             },
             xAxis: {
                 type: 'value',
-                name: '出现次数'
+                name: '出现次数',
+                nameLocation: 'end',
+                nameGap: 5
             },
             yAxis: {
                 type: 'category',
