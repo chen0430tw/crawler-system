@@ -56,26 +56,52 @@ CORS(app)  # 允许跨域请求
 # 配置文件上传路径
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 RESULTS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
+TASKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tasks.json')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 限制上传大小为16MB
 
-# 存储爬虫任务状态
-tasks = {}
+# 任务持久化函数
+def load_tasks():
+    """从文件加载任务列表"""
+    if os.path.exists(TASKS_FILE):
+        try:
+            with open(TASKS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                logger.info(f"从文件加载了 {len(data.get('tasks', {}))} 个任务")
+                return data.get('tasks', {}), data.get('wiki_tasks', {}), data.get('wiki_stats', {
+                    'total_pages_fetched': 0,
+                    'total_searches': 0,
+                    'total_tasks': 0,
+                    'languages_used': {},
+                    'last_activity': None
+                })
+        except Exception as e:
+            logger.error(f"加载任务文件失败: {e}")
+    return {}, {}, {
+        'total_pages_fetched': 0,
+        'total_searches': 0,
+        'total_tasks': 0,
+        'languages_used': {},
+        'last_activity': None
+    }
 
-# Wiki 专用任务存储
-wiki_tasks = {}
+def save_tasks():
+    """保存任务列表到文件"""
+    try:
+        with open(TASKS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({
+                'tasks': tasks,
+                'wiki_tasks': wiki_tasks,
+                'wiki_stats': wiki_stats
+            }, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"保存任务文件失败: {e}")
 
-# Wiki 统计数据
-wiki_stats = {
-    'total_pages_fetched': 0,
-    'total_searches': 0,
-    'total_tasks': 0,
-    'languages_used': {},
-    'last_activity': None
-}
+# 存储爬虫任务状态 - 从文件加载
+tasks, wiki_tasks, wiki_stats = load_tasks()
 
 # 任务状态定义
 TASK_STATUS = {
@@ -324,13 +350,13 @@ def run_crawler_task(task_id, config):
         tasks[task_id]['result_file'] = result_file
         tasks[task_id]['details']['success_rate'] = statistics['successRate']
         tasks[task_id]['details']['duration'] = task_info['duration']
-        
+
         logger.info(f"任务 {task_id} 成功完成，用时 {task_info['duration']:.2f} 秒")
-        
+
     except Exception as e:
         logger.error(f"任务 {task_id} 出错: {str(e)}")
         logger.error(traceback.format_exc())
-        
+
         # 更新任务状态为失败
         tasks[task_id]['status'] = TASK_STATUS['FAILED']
         tasks[task_id]['end_time'] = datetime.now().isoformat()
@@ -340,6 +366,8 @@ def run_crawler_task(task_id, config):
         # 关闭资源
         if 'crawler' in locals():
             crawler.close()
+        # 保存任务状态
+        save_tasks()
 
 @app.route('/api/submit', methods=['POST'])
 def submit_task():
@@ -366,7 +394,8 @@ def submit_task():
             'created_at': datetime.now().isoformat(),
             'config': config
         }
-        
+        save_tasks()  # 持久化任务
+
         # 启动后台线程执行爬虫任务
         thread = threading.Thread(
             target=run_crawler_task,
@@ -500,6 +529,7 @@ def cancel_task(task_id):
     if task['status'] == TASK_STATUS['PENDING']:
         task['status'] = TASK_STATUS['FAILED']
         task['error'] = '任务被用户取消'
+        save_tasks()  # 持久化
         return jsonify({'message': '任务已取消'})
     else:
         return jsonify({
@@ -1054,6 +1084,7 @@ def run_wiki_task(task_id, config):
         for i, title in enumerate(all_titles):
             if task.get('cancelled'):
                 task['status'] = TASK_STATUS['CANCELLED']
+                save_tasks()  # 持久化
                 return
 
             try:
@@ -1089,12 +1120,14 @@ def run_wiki_task(task_id, config):
         wiki_stats['languages_used'][language] = wiki_stats['languages_used'].get(language, 0) + 1
 
         logger.info(f"Wiki 任务完成: {task_id}, 获取 {len(results)} 个页面")
+        save_tasks()  # 持久化
 
     except Exception as e:
         task['status'] = TASK_STATUS['FAILED']
         task['error'] = str(e)
         task['end_time'] = datetime.now().isoformat()
         logger.error(f"Wiki 任务失败 {task_id}: {str(e)}")
+        save_tasks()  # 持久化
 
 
 @app.route('/api/wiki/submit', methods=['POST'])
@@ -1125,6 +1158,7 @@ def wiki_submit_task():
             'config': data,
             'cancelled': False
         }
+        save_tasks()  # 持久化
 
         # 启动后台线程
         thread = threading.Thread(
@@ -1210,6 +1244,7 @@ def wiki_cancel_task(task_id):
     task['cancelled'] = True
     task['status'] = TASK_STATUS['CANCELLED']
     task['end_time'] = datetime.now().isoformat()
+    save_tasks()  # 持久化
 
     return jsonify({
         'message': '任务已取消',
