@@ -16,6 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- ECharts支持 -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
     <!-- jQCloud支持 -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jqcloud2@2.0.3/dist/jqcloud.min.js"></script>
@@ -309,6 +310,9 @@
                                     <a class="nav-link" id="category-tab" data-bs-toggle="tab" href="#category">分类结果</a>
                                 </li>
                                 <li class="nav-item">
+                                    <a class="nav-link" id="visualization-tab" data-bs-toggle="tab" href="#visualization">数据可视化</a>
+                                </li>
+                                <li class="nav-item">
                                     <a class="nav-link" id="conspiracy-tab" data-bs-toggle="tab" href="#conspiracy">阴谋论检测</a>
                                 </li>
                                 <li class="nav-item">
@@ -384,7 +388,29 @@
                                         </div>
                                     </div>
                                 </div>
-                                
+
+                                <!-- 数据可视化标签页 -->
+                                <div class="tab-pane fade" id="visualization">
+                                    <div class="row mb-3">
+                                        <div class="col-12">
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-outline-primary active" id="viz-wordcloud-btn">词云</button>
+                                                <button type="button" class="btn btn-outline-primary" id="viz-linkgraph-btn">链接关系图</button>
+                                                <button type="button" class="btn btn-outline-primary" id="viz-stats-btn">词频统计</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div id="vizContainer" style="width: 100%; height: 500px; border: 1px solid #dee2e6; border-radius: 8px; background: #fff;">
+                                                <div class="empty-message text-center py-5">
+                                                    <p class="text-muted">请先上传爬虫结果文件或运行爬虫任务</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- 阴谋论检测标签页 -->
                                 <div class="tab-pane fade" id="conspiracy">
                                     <div class="row">
