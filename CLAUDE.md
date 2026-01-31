@@ -134,6 +134,43 @@ Every time you finish writing or modifying code, you MUST run through this check
 - Re-read the user's original request. Count how many things they asked for. Verify you addressed ALL of them, not just the first one.
 - If the task has N steps, verify you completed N steps, not N-1.
 
+### 7. Security Check (安全检查)
+- NEVER use `innerHTML` with any data that originates from user input or API responses. Use `textContent` or create elements with `createElement()`.
+- NEVER put API keys, tokens, or credentials in frontend code.
+- All user input displayed on page must be escaped. If using `innerHTML` for formatting, sanitize first.
+- Backend must validate all input from `request.args` / `request.json`. Do not trust frontend validation alone.
+- Use parameterized queries if any database interaction is ever added. Never concatenate user input into queries.
+
+### 8. Response Format Consistency (响应格式一致性)
+- All API success responses MUST use the same structure: `{"success": true, "data": ...}` or return data directly — pick ONE pattern and stick to it across ALL endpoints.
+- All API error responses MUST use: `{"error": "message"}` with appropriate HTTP status code (400 for bad input, 404 for not found, 500 for server error). Do not return 200 with error in body.
+- Field naming convention: use `snake_case` in Python backend, use `camelCase` in JS frontend. If conversion is needed, do it in ONE place (ApiClient), not scattered everywhere.
+
+### 9. Async & Promise Handling (异步处理)
+- Every `fetch()` chain MUST have `.catch()`. Every `async` function MUST have `try/catch`.
+- Check `response.ok` before calling `response.json()`. A 404 response is not JSON — calling `.json()` on it will throw.
+- If multiple async operations update the same DOM element or state, ensure ordering. Use a request ID or abort previous requests with `AbortController`.
+- Never fire-and-forget: `fetch('/api/something')` without await or `.then()` is always a bug.
+
+### 10. DOM & Memory (DOM 与内存)
+- Every `addEventListener()` on dynamically created elements must have a corresponding cleanup path, or use event delegation on a parent element instead.
+- Never use `innerHTML +=` in a loop — it re-parses the entire content each time. Build the string first, then assign once, or use `DocumentFragment`.
+- `setInterval()` and `setTimeout()` must be tracked and cleared when no longer needed. Store the ID and call `clearInterval()`/`clearTimeout()`.
+- Avoid caching DOM references to elements that may be removed and re-created.
+
+### 11. CSS & Layout (样式与布局)
+- Never use hardcoded `px` widths on containers that should be responsive. Use `max-width`, `%`, or `min()`/`clamp()`.
+- If you add `z-index`, check existing z-index values in the project first. Do not blindly use `9999`.
+- `overflow: hidden` hides content — only use it when you are certain nothing will be clipped. Prefer `overflow: auto` for scrollable areas.
+- Every `position: absolute` or `position: fixed` element needs an explicit `z-index` and a positioned parent (`position: relative` on container).
+- If you change a class name in CSS, grep for it in ALL `.html`, `.js` files. CSS class renames break silently.
+
+### 12. Data Shape & Type Safety (数据类型)
+- When receiving JSON from backend, always handle: missing fields (`undefined`), `null` values, empty arrays `[]`, and empty strings `""`. Do not assume data is always present and well-formed.
+- Number fields from JSON may arrive as strings (e.g., query params are always strings). Parse explicitly with `parseInt()`/`parseFloat()` where needed.
+- Python `None` becomes JSON `null` becomes JS `null`. Python `True/False` becomes `true/false`. Do not compare with `==` to string `"true"`.
+- When passing data between frontend and backend, verify types match: JS `number` vs Python `int`/`float`, JS `array` vs Python `list`, JS `object` vs Python `dict`.
+
 ### Self-Verification Command
 After completing code changes, run:
 ```bash
