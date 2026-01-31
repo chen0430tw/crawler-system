@@ -984,7 +984,7 @@
            const toggleAnnouncements = document.getElementById('toggle-announcements');
            const toggleRecommendations = document.getElementById('toggle-recommendations');
            
-           // 附加功能区域
+           // 附加功能区域（小助手/看板娘的 toggle 逻辑已移至 ui-manager.js 统一管理）
            const announcementSection = document.getElementById('announcementSection');
            const recommendationSection = document.getElementById('recommendationSection');
            const sidebarExtras = document.getElementById('sidebarExtras');
@@ -999,24 +999,6 @@
                } else {
                    sidebarExtras.classList.add('d-none');
                }
-           }
-
-           // 绑定事件 - 看板娘浮动显示（CDN 会创建 #waifu 元素）
-           let live2dInitialized = false;
-           if (toggleAssistant) {
-               toggleAssistant.addEventListener('change', function() {
-                   if (this.checked) {
-                       // 首次开启时才加载 Live2D（避免浪费 CDN 流量）
-                       if (!live2dInitialized && typeof initLive2D === 'function') {
-                           initLive2D();
-                           live2dInitialized = true;
-                       } else {
-                           showLive2D();
-                       }
-                   } else {
-                       hideLive2D();
-                   }
-               });
            }
            
            if (toggleAnnouncements) {

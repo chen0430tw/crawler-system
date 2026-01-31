@@ -28,8 +28,7 @@ function initializeSettings() {
         toggleAssistant: document.getElementById('toggle-assistant'),
         toggleAnnouncements: document.getElementById('toggle-announcements'),
         toggleRecommendations: document.getElementById('toggle-recommendations'),
-        // 侧边栏区域
-        assistantSection: document.getElementById('assistantSection'),
+        // 侧边栏区域（小助手已改为浮动看板娘，不再是侧边栏元素）
         announcementSection: document.getElementById('announcementSection'),
         recommendationSection: document.getElementById('recommendationSection'),
         sidebarExtras: document.getElementById('sidebarExtras')
@@ -93,6 +92,10 @@ function loadSettings(elements) {
     
     if (elements.toggleAssistant) {
         elements.toggleAssistant.checked = showAssistant;
+        // 页面加载时如果小助手开关已开启，立即初始化看板娘
+        if (showAssistant && typeof initLive2D === 'function') {
+            initLive2D();
+        }
     }
     if (elements.toggleAnnouncements) {
         elements.toggleAnnouncements.checked = showAnnouncements;
@@ -181,14 +184,24 @@ function bindSettingsEvents(elements) {
         });
     }
     
-    // 界面元素显示切换
+    // 界面元素显示切换 - 小助手（浮动看板娘）
     if (elements.toggleAssistant) {
         elements.toggleAssistant.addEventListener('change', function() {
             const show = this.checked;
             localStorage.setItem('showAssistant', show);
-            updateSectionsVisibility(elements, 
-                show, 
-                elements.toggleAnnouncements ? elements.toggleAnnouncements.checked : false, 
+            if (show) {
+                // 首次开启时初始化，之后只显示/隐藏
+                if (typeof initLive2D === 'function' && !document.getElementById('waifu')) {
+                    initLive2D();
+                } else {
+                    showLive2D();
+                }
+            } else {
+                hideLive2D();
+            }
+            updateSectionsVisibility(elements,
+                false,  // 小助手不再影响侧边栏
+                elements.toggleAnnouncements ? elements.toggleAnnouncements.checked : false,
                 elements.toggleRecommendations ? elements.toggleRecommendations.checked : false
             );
         });
@@ -317,14 +330,8 @@ function applyGlassEffect(enabled) {
  * 更新侧边栏区域显示状态
  */
 function updateSectionsVisibility(elements, showAssistant, showAnnouncements, showRecommendations) {
-    if (elements.assistantSection) {
-        if (showAssistant) {
-            elements.assistantSection.classList.remove('d-none');
-        } else {
-            elements.assistantSection.classList.add('d-none');
-        }
-    }
-    
+    // 小助手已改为浮动看板娘，不在侧边栏中，showAssistant 参数保留但不控制侧边栏元素
+
     if (elements.announcementSection) {
         if (showAnnouncements) {
             elements.announcementSection.classList.remove('d-none');
@@ -343,9 +350,8 @@ function updateSectionsVisibility(elements, showAssistant, showAnnouncements, sh
     
     // 更新整个附加区域的显示状态
     if (elements.sidebarExtras) {
-        const hasVisibleExtras = 
-            (elements.assistantSection && !elements.assistantSection.classList.contains('d-none')) || 
-            (elements.announcementSection && !elements.announcementSection.classList.contains('d-none')) || 
+        const hasVisibleExtras =
+            (elements.announcementSection && !elements.announcementSection.classList.contains('d-none')) ||
             (elements.recommendationSection && !elements.recommendationSection.classList.contains('d-none'));
         
         if (hasVisibleExtras) {
