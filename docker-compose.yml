@@ -19,6 +19,7 @@ services:
       - crawler-uploads:/app/uploads
       - crawler-results:/app/results
       - crawler-logs:/app/logs
+      - ./backend/tasks.json:/app/tasks.json
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s

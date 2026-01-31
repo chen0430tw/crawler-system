@@ -3300,12 +3300,12 @@ class UrbanLegendAnalyzer:
     def analyze_content(self, content, url, metadata=None):
         """
         分析爬取的内容是否为都市传说
-        
+
         参数:
             content: 网页内容文本
             url: 网页URL
             metadata: 元数据信息（可选）
-            
+
         返回:
             分析结果字典
         """
@@ -3316,51 +3316,70 @@ class UrbanLegendAnalyzer:
                 'url': url,
                 'analysis_time': datetime.now().isoformat()
             }
-            
+
         try:
-            # 这里是简化的分析过程，实际应用中需要根据内容特征提取热度和反制信息
-            
-            # 基于内容长度和复杂度的简单估计
+            # 基于内容长度
             content_length = len(content)
-            # 字符数 / 1000 作为简单的SEO因子（越长的文章可能越受欢迎）
-            seo_factor = min(5.0, content_length / 1000)
-            
-            # 简单模拟热度和反制序列
-            # 在实际应用中，这些应该从历史数据中提取
-            t = np.linspace(0, 20, 100)
-            
-            # 使用内容指标构造合成的热度曲线
-            # 这里采用随机值+内容长度因素作为演示
-            # 实际应用应该基于真实的传播数据
-            noise = np.random.normal(0, 0.1, len(t))
-            theta_t = 1.0 + 0.5 * np.sin(t/2) + 0.3 * np.sin(t) + noise + (content_length / 50000)
-            
-            # 反制信息曲线，通常稍微滞后于热度曲线
-            y_t = 0.8 + 0.4 * np.sin((t-1.5)/2) + 0.2 * np.sin(t-1.5) + np.random.normal(0, 0.1, len(t))
-            
-            # 提取关键词特征
-            # 简单示例：检查一些常见的都市传说关键词
+
+            # 提取关键词特征 - 都市传说/谣言常见关键词
             urban_legend_keywords = [
-                "震惊", "秘密", "不为人知", "揭秘", "惊人真相", "官方掩盖", 
+                "震惊", "秘密", "不为人知", "揭秘", "惊人真相", "官方掩盖",
                 "不会告诉你", "医生不会告诉你", "政府隐瞒", "阴谋论",
-                "绝密", "转发", "扩散", "注意"
+                "绝密", "转发", "扩散", "注意", "真相被掩盖", "内幕",
+                "别再被骗", "99%的人不知道", "紧急扩散", "看完震惊"
             ]
-            
-            keyword_count = sum(1 for keyword in urban_legend_keywords if keyword in content)
-            keyword_score = min(1.0, keyword_count / 5)  # 最多5个关键词就算满分
-            
-            # 调整SEO因子加入关键词得分
-            seo_factor = seo_factor * (1 + keyword_score)
-            
-            # 调用都市传说判断函数
-            label, details = self.urban_legend_judge_seo(theta_t, y_t, t, seo_factor)
+
+            # 可信来源白名单（这些网站默认为普通帖子）
+            trusted_domains = [
+                'google.com', 'google.com.tw', 'google.co.jp',
+                'wikipedia.org', 'github.com', 'microsoft.com',
+                'apple.com', 'amazon.com', 'facebook.com',
+                'gov.cn', 'gov.tw', 'edu.cn', 'edu.tw',
+                'baidu.com', 'bilibili.com', 'zhihu.com'
+            ]
+
+            # 检查是否为可信来源
+            is_trusted = any(domain in url.lower() for domain in trusted_domains)
+
+            # 计算关键词匹配
+            matched_keywords = [kw for kw in urban_legend_keywords if kw in content]
+            keyword_count = len(matched_keywords)
+            keyword_score = min(1.0, keyword_count / 5)
+
+            # 基于关键词的判断逻辑（不再依赖随机数据）
+            # 只有当关键词匹配数量足够多时才标记为可疑
+            if is_trusted or keyword_count == 0:
+                label = "🟢 普通帖子"
+                J_SEO = 0.5
+            elif keyword_count >= 4:
+                label = "✅ 已确认都市传说"
+                J_SEO = 2.5
+            elif keyword_count >= 2:
+                label = "⚠️ 疑似都市传说"
+                J_SEO = 1.5
+            else:
+                label = "🟢 普通帖子"
+                J_SEO = 0.8
+
+            # 构造详情
+            details = {
+                'theta_max': 1.0 + keyword_score,
+                'y_max': 1.0,
+                'J_raw': 1.0 + keyword_score,
+                'J_SEO': J_SEO,
+                'seo_factor': keyword_score,
+                'num_peaks_theta': keyword_count,
+                'lag_time': 0,
+                'thresholds': self.thresholds
+            }
             
             # 添加额外的内容分析指标
             details.update({
                 'content_length': content_length,
                 'keyword_score': keyword_score,
                 'keyword_count': keyword_count,
-                'matched_keywords': [kw for kw in urban_legend_keywords if kw in content]
+                'matched_keywords': matched_keywords,
+                'is_trusted_source': is_trusted
             })
             
             # 构造最终结果

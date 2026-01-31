@@ -5293,7 +5293,9 @@ function initDataVisualization() {
 
     // 从爬虫结果提取关键词和词频
     function extractKeywords(results) {
-        if (!results || !results.pages) return [];
+        // 支持多种数据格式: results.content (爬虫结果) 或 results.pages
+        const pages = results?.content || results?.pages || [];
+        if (!pages || pages.length === 0) return [];
 
         const wordCount = {};
         // 中文分词简化处理 - 提取2-4字词组
@@ -5305,15 +5307,16 @@ function initDataVisualization() {
         const stopWords = new Set(['的', '是', '在', '了', '和', '与', '或', '对', '为', '有', '等', '被',
             '将', '也', '都', '到', '从', '但', '可', '这', '那', '就', '而', '以', '及', '中', '上', '下',
             'the', 'and', 'is', 'in', 'to', 'of', 'a', 'for', 'on', 'with', 'as', 'at', 'by', 'an', 'be',
-            '可以', '进行', '通过', '使用', '没有', '因为', '如果', '这个', '那个', '他们', '我们', '自己']);
+            '可以', '进行', '通过', '使用', '没有', '因为', '如果', '这个', '那个', '他们', '我们', '自己',
+            'Google', 'google', 'www', 'com', 'http', 'https', 'html', 'css', 'nbsp']);
 
-        results.pages.forEach(page => {
+        pages.forEach(page => {
             // 处理标题
             if (page.title) {
                 const titleWords = page.title.match(chinesePattern) || [];
                 const titleEnWords = page.title.match(englishPattern) || [];
                 [...titleWords, ...titleEnWords].forEach(word => {
-                    if (!stopWords.has(word.toLowerCase())) {
+                    if (!stopWords.has(word.toLowerCase()) && !stopWords.has(word)) {
                         wordCount[word] = (wordCount[word] || 0) + 3; // 标题权重较高
                     }
                 });
@@ -5326,7 +5329,7 @@ function initDataVisualization() {
                 const contentWords = text.match(chinesePattern) || [];
                 const contentEnWords = text.match(englishPattern) || [];
                 [...contentWords, ...contentEnWords].forEach(word => {
-                    if (!stopWords.has(word.toLowerCase())) {
+                    if (!stopWords.has(word.toLowerCase()) && !stopWords.has(word)) {
                         wordCount[word] = (wordCount[word] || 0) + 1;
                     }
                 });
@@ -5342,13 +5345,15 @@ function initDataVisualization() {
 
     // 从爬虫结果提取链接关系
     function extractLinks(results) {
-        if (!results || !results.pages) return { nodes: [], links: [] };
+        // 支持多种数据格式: results.content (爬虫结果) 或 results.pages
+        const pages = results?.content || results?.pages || [];
+        if (!pages || pages.length === 0) return { nodes: [], links: [] };
 
         const nodes = [];
         const nodeMap = {};
         const links = [];
 
-        results.pages.forEach((page, index) => {
+        pages.forEach((page, index) => {
             const url = page.url || `page_${index}`;
             const title = page.title || url;
             const shortTitle = title.length > 15 ? title.substring(0, 15) + '...' : title;
@@ -5365,10 +5370,10 @@ function initDataVisualization() {
         });
 
         // 提取页面间的链接关系
-        results.pages.forEach((page, sourceIndex) => {
+        pages.forEach((page, sourceIndex) => {
             if (page.content) {
                 // 查找内容中指向其他已爬取页面的链接
-                results.pages.forEach((targetPage, targetIndex) => {
+                pages.forEach((targetPage, targetIndex) => {
                     if (sourceIndex !== targetIndex && targetPage.url) {
                         if (page.content.includes(targetPage.url) ||
                             (targetPage.title && page.content.includes(targetPage.title))) {
