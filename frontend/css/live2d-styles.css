@@ -23,9 +23,14 @@
     transition: none;
 }
 
-/* 隐藏 CDN 自带的工具栏 */
+/* 工具栏样式 */
 #waifu-tool {
-    display: none !important;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#waifu:hover #waifu-tool {
+    opacity: 1;
 }
 
 /* 看板娘提示框 - 覆盖 CDN 样式使其在右侧显示正常 */

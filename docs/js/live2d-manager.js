@@ -34,7 +34,7 @@ function initLive2D() {
                 initWidget({
                     waifuPath: 'https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/waifu-tips.json',
                     apiPath: 'https://live2d.fghrsh.net/api/',
-                    tools: []  // 不显示工具栏
+                    tools: ["hitokoto", "asteroids", "switch-model", "switch-texture", "photo", "info", "quit"]
                 });
 
                 // CDN 脚本会创建 #waifu 元素，等它出现后覆盖定位并添加拖动功能
