@@ -5350,10 +5350,11 @@ function initDataVisualization() {
                 });
             }
 
-            // 处理内容
-            if (page.content) {
+            // 处理内容 - 优先使用纯文本 text_content（避免HTML标记污染关键词）
+            const rawText = page.text_content || page.content;
+            if (rawText) {
                 // 移除HTML标签、style标签内容、script标签内容
-                let text = page.content
+                let text = rawText
                     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
                     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
                     .replace(/<[^>]+>/g, ' ')
