@@ -245,11 +245,8 @@ function showFallbackMessage() {
     `;
 }
 
-// 在DOM加载完成后初始化
-document.addEventListener('DOMContentLoaded', function() {
-    // 延迟初始化，确保页面其他部分已加载
-    setTimeout(initLive2D, 1000);
-});
+// 不自动初始化，由 toggle-assistant 开关控制
+// 外部调用 initLive2D() 来启动
 
 // 主题变更时调整看板娘容器样式
 document.addEventListener('themeChanged', function(e) {

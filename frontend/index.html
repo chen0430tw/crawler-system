@@ -1025,10 +1025,16 @@
            }
            
            // 绑定事件
+           let live2dInitialized = false;
            if (toggleAssistant) {
                toggleAssistant.addEventListener('change', function() {
                    if (this.checked) {
                        assistantSection.classList.remove('d-none');
+                       // 首次开启时才加载 Live2D（避免浪费 CDN 流量）
+                       if (!live2dInitialized && typeof initLive2D === 'function') {
+                           initLive2D();
+                           live2dInitialized = true;
+                       }
                    } else {
                        assistantSection.classList.add('d-none');
                    }
@@ -1119,6 +1125,9 @@
    <!-- 添加的 theme-switcher.js 引用 -->
    <script src="js/theme-switcher.js"></script>
    
+   <!-- Live2D 看板娘 -->
+   <script src="js/live2d-manager.js"></script>
+
    <!-- 剩余脚本 -->
    <script src="language-manager.js"></script>
    <script src="ui-manager.js"></script>
