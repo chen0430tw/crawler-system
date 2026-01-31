@@ -4937,10 +4937,38 @@ function sanitizeHtml(html) {
     const scripts = tempDiv.querySelectorAll('script');
     scripts.forEach(script => script.remove());
     
-    // 移除所有iframe标签
+    // 移除所有iframe标签（可能包含外部内容）
     const iframes = tempDiv.querySelectorAll('iframe');
     iframes.forEach(iframe => iframe.remove());
-    
+
+    // 处理视频元素 - 添加控件并限制大小
+    const videos = tempDiv.querySelectorAll('video');
+    videos.forEach(video => {
+        // 添加播放控件
+        video.setAttribute('controls', 'true');
+        // 移除自动播放（避免干扰）
+        video.removeAttribute('autoplay');
+        // 设置最大宽度
+        video.style.maxWidth = '100%';
+        video.style.height = 'auto';
+        // 包装在容器中
+        const wrapper = document.createElement('div');
+        wrapper.className = 'video-container';
+        video.parentNode.insertBefore(wrapper, video);
+        wrapper.appendChild(video);
+    });
+
+    // 移除视频播放按钮的无意义文本（如 "Play silent looping video"）
+    const allTextNodes = tempDiv.querySelectorAll('*');
+    allTextNodes.forEach(el => {
+        if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+            const text = el.textContent.trim();
+            if (text.match(/^(Play|Pause)\s+(silent\s+)?(looping\s+)?video$/i)) {
+                el.remove();
+            }
+        }
+    });
+
     // 移除on*事件属性
     const allElements = tempDiv.querySelectorAll('*');
     allElements.forEach(el => {
