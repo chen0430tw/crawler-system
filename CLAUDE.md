@@ -96,6 +96,51 @@ docs/                 # GitHub Pages mirror of frontend/ (keep in sync)
 4. Add API routes in `crawler_server.py`
 5. Add mock endpoints if needed
 
+## Code Completion Checklist (MANDATORY)
+
+Every time you finish writing or modifying code, you MUST run through this checklist BEFORE telling the user you are done. Do NOT skip any item. These are real bugs that have occurred repeatedly in this project.
+
+### 1. Phantom Endpoint Check (虚空端点)
+- Every `fetch()` or API call in frontend JS → verify the route ACTUALLY EXISTS in `crawler_server.py` by reading the file. Do not assume. Do not guess from memory.
+- Every `ApiClient` method → verify it calls a real backend route.
+- If you wrote a new frontend feature that calls `/api/xxx`, open `crawler_server.py` and confirm `@app.route('/api/xxx')` exists. If it doesn't, create it.
+
+### 2. Parameter Contract Check (参数契约)
+- For every API call: verify the request parameter names match EXACTLY between frontend (what is sent) and backend (what is read via `request.args` / `request.json`).
+- For third-party APIs (Wikipedia, Bilibili, etc.): READ THE ACTUAL DOCS or existing working code. Do not guess parameter behavior. Boolean-like flags (e.g., Wikipedia `exintro`) may activate by presence, not by value.
+- If backend expects `title` but frontend sends `url`, that is a bug. Fix it.
+
+### 3. Cross-File Consistency Check (跨文件一致性)
+- Changed a function signature → `grep` for ALL callers across the entire project and update every one.
+- Changed a backend route path → search `frontend/`, `docs/`, and `api_client.js` for the old path.
+- Added/removed a CSS class → search `.html`, `.js`, and `.css` files.
+- Changed `api_client.js` → copy to `docs/api_client.js`.
+- Changed any file in `frontend/` → mirror to `docs/`.
+
+### 4. UI State Management Check (状态管理)
+- Every button/action that triggers an async operation:
+  - MUST disable itself or show loading state during the operation.
+  - MUST re-enable or reset state when the operation completes OR fails.
+  - Clicking the same button twice must not break anything (idempotency).
+- Every loading indicator MUST have a corresponding hide/clear on both success AND error paths.
+
+### 5. Error & Edge Case Check (错误处理)
+- Every `fetch()` call → must have `.catch()` or try/catch with user-visible error feedback.
+- Network timeout → show a message to the user with option to retry. Never silently hang.
+- Empty results → show "no results found" message, not a blank screen.
+- API returns error status → display the error, do not ignore it.
+
+### 6. Completeness Check (完整性)
+- Re-read the user's original request. Count how many things they asked for. Verify you addressed ALL of them, not just the first one.
+- If the task has N steps, verify you completed N steps, not N-1.
+
+### Self-Verification Command
+After completing code changes, run:
+```bash
+cd backend && python -c "from crawler import *; from crawler_server import app; print('OK')"
+```
+If this fails, fix it before declaring the task done.
+
 ## Do Not
 - Do not introduce npm, webpack, or any JS build tooling.
 - Do not replace file-based storage with a database without explicit request.
