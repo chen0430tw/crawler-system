@@ -1,65 +1,92 @@
 // live2d-manager.js - 看板娘管理器
-// 使用 stevenjoezhang/live2d-widget CDN，覆盖定位到右下角，支持拖动
+// 使用 stevenjoezhang/live2d-widget 的 autoload.js
 
-// 加载 Live2D CDN 脚本
-function loadLive2DScripts() {
-    return new Promise((resolve, reject) => {
-        // 加载 Live2D 核心库
-        const script1 = document.createElement('script');
-        script1.src = 'https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/live2d.min.js';
-        script1.onload = () => {
-            // 加载 Live2D Widget（会创建 initWidget 函数和 #waifu 元素）
-            const script2 = document.createElement('script');
-            script2.src = 'https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/waifu-tips.min.js';
-            script2.onload = resolve;
-            script2.onerror = reject;
-            document.head.appendChild(script2);
-        };
-        script1.onerror = reject;
-        document.head.appendChild(script1);
+// Live2D 配置
+var live2dConfig = {
+    waifuPath: 'https://fastly.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/waifu-tips.json',
+    cdnPath: 'https://fastly.jsdelivr.net/gh/fghrsh/live2d_api/',
+    tools: ['hitokoto', 'asteroids', 'switch-model', 'switch-texture', 'photo', 'info', 'quit'],
+    drag: true,
+    logLevel: 'error'
+};
 
-        // 加载 CDN 基础样式（我们的 live2d-styles.css 会覆盖定位）
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/waifu.min.css';
-        document.head.appendChild(link);
+// 加载 Live2D autoload 脚本
+function loadLive2DScript() {
+    return new Promise(function(resolve, reject) {
+        var script = document.createElement('script');
+        script.src = 'https://fastly.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/autoload.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
     });
 }
 
 // 初始化看板娘
 function initLive2D() {
-    loadLive2DScripts()
-        .then(() => {
+    // 设置全局配置供 autoload.js 使用
+    window.live2d_settings = live2dConfig;
+
+    loadLive2DScript()
+        .then(function() {
+            // autoload.js 会自动初始化，等待 #waifu 元素出现后调整位置
+            waitForElement('#waifu', function(waifuEl) {
+                // 覆盖定位到右下角
+                waifuEl.style.position = 'fixed';
+                waifuEl.style.right = '20px';
+                waifuEl.style.bottom = '60px';
+                waifuEl.style.left = 'auto';
+                waifuEl.style.zIndex = '500';
+                console.log('看板娘加载完成');
+            });
+        })
+        .catch(function(error) {
+            console.error('加载Live2D脚本失败:', error);
+            // 回退到手动加载方式
+            loadLive2DManual();
+        });
+}
+
+// 手动加载方式（回退方案）
+function loadLive2DManual() {
+    var script1 = document.createElement('script');
+    script1.src = 'https://fastly.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/live2d.min.js';
+    script1.onload = function() {
+        var script2 = document.createElement('script');
+        script2.src = 'https://fastly.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/waifu-tips.js';
+        script2.onload = function() {
             if (typeof initWidget === 'function') {
                 initWidget({
-                    waifuPath: 'https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/waifu-tips.json',
-                    apiPath: 'https://live2d.fghrsh.net/api/',
-                    tools: ["hitokoto", "asteroids", "switch-model", "switch-texture", "photo", "info", "quit"]
+                    waifuPath: live2dConfig.waifuPath,
+                    cdnPath: live2dConfig.cdnPath,
+                    tools: live2dConfig.tools
                 });
-
-                // CDN 脚本会创建 #waifu 元素，等它出现后覆盖定位并添加拖动功能
                 waitForElement('#waifu', function(waifuEl) {
-                    // 用 inline style 强制覆盖 CDN 的 left:0 定位到右下角
                     waifuEl.style.position = 'fixed';
                     waifuEl.style.right = '20px';
                     waifuEl.style.bottom = '60px';
                     waifuEl.style.left = 'auto';
                     waifuEl.style.zIndex = '500';
-                    setupDrag(waifuEl);
-                    console.log('看板娘加载完成');
+                    if (live2dConfig.drag) {
+                        setupDrag(waifuEl);
+                    }
+                    console.log('看板娘加载完成（手动模式）');
                 });
-            } else {
-                console.error('Live2D初始化失败：找不到initWidget函数');
             }
-        })
-        .catch(error => {
-            console.error('加载Live2D脚本失败:', error);
-        });
+        };
+        document.head.appendChild(script2);
+    };
+    document.head.appendChild(script1);
+
+    // 加载样式
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fastly.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/waifu.css';
+    document.head.appendChild(link);
 }
 
-// 等待 CDN 创建的 DOM 元素出现
+// 等待 DOM 元素出现
 function waitForElement(selector, callback, maxAttempts) {
-    maxAttempts = maxAttempts || 20;
+    maxAttempts = maxAttempts || 30;
     var attempts = 0;
     var timer = setInterval(function() {
         var el = document.querySelector(selector);
@@ -71,10 +98,10 @@ function waitForElement(selector, callback, maxAttempts) {
             clearInterval(timer);
             console.warn('等待元素超时:', selector);
         }
-    }, 300);
+    }, 200);
 }
 
-// 拖动功能
+// 拖动功能（回退方案使用）
 function setupDrag(el) {
     var isDragging = false;
     var startX = 0;
@@ -83,7 +110,6 @@ function setupDrag(el) {
     var origBottom = 0;
 
     el.addEventListener('mousedown', function(e) {
-        // 忽略来自 canvas 内部的点击（让 Live2D 模型交互正常工作）
         if (e.target.tagName === 'CANVAS') return;
         e.preventDefault();
         isDragging = true;
@@ -100,10 +126,8 @@ function setupDrag(el) {
         e.preventDefault();
         var dx = e.clientX - startX;
         var dy = e.clientY - startY;
-        // right 减少 = 向右移, dx 正 = 鼠标向右
         var newRight = origRight - dx;
         var newBottom = origBottom - dy;
-        // 限制不超出视窗
         var maxRight = window.innerWidth - el.offsetWidth;
         var maxBottom = window.innerHeight - el.offsetHeight;
         newRight = Math.max(0, Math.min(newRight, maxRight));
@@ -119,7 +143,7 @@ function setupDrag(el) {
         }
     });
 
-    // 触摸支持（移动端）
+    // 触摸支持
     el.addEventListener('touchstart', function(e) {
         if (e.target.tagName === 'CANVAS') return;
         var touch = e.touches[0];
@@ -155,7 +179,7 @@ function setupDrag(el) {
     });
 }
 
-// 显示/隐藏看板娘（由设置页面的 toggle 开关调用）
+// 显示/隐藏看板娘
 function showLive2D() {
     var el = document.getElementById('waifu');
     if (el) el.style.display = '';
