@@ -256,6 +256,7 @@ def run_crawler_task(task_id, config):
                     "url": url,
                     "title": title or "无标题",
                     "content": clean_content,
+                    "text_content": content or processor.extract_text_from_html(clean_content),
                     "keywords": keywords,
                     "depth": data.get("depth", 0),
                     "format": format_type,
