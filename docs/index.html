@@ -235,28 +235,7 @@
                     
                     <!-- 附加功能区域 - 默认隐藏 -->
                     <div id="sidebarExtras" class="mt-4">
-                        <!-- 小助手区域 - 默认隐藏 -->
-                        <div id="assistantSection" class="sidebar-section mb-4 d-none">
-                            <div class="card">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0"><i class="bi bi-person-hearts"></i> 小助手</h5>
-                                    <button type="button" class="btn-close" aria-label="Close" 
-                                            onclick="document.getElementById('assistantSection').classList.add('d-none');document.getElementById('toggle-assistant').checked=false;"></button>
-                                </div>
-                                <div class="card-body text-center">
-                                    <div id="live2d-widget" class="live2d-widget-container"></div>
-                                    <p class="text-center mt-2">我是你的爬虫助手！有任何问题可以问我哦~</p>
-                                    <div class="mt-2">
-                                        <button class="btn btn-sm btn-outline-primary change-model-btn">
-                                            <i class="bi bi-arrow-repeat"></i> 换装
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-secondary toggle-dialog-btn">
-                                            <i class="bi bi-chat-dots"></i> 对话
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <!-- 小助手区域已移至页面右下角浮动显示 -->
                         
                         <!-- 公告区域 - 默认隐藏 -->
                         <div id="announcementSection" class="sidebar-section mb-4 d-none">
@@ -1006,39 +985,37 @@
            const toggleRecommendations = document.getElementById('toggle-recommendations');
            
            // 附加功能区域
-           const assistantSection = document.getElementById('assistantSection');
            const announcementSection = document.getElementById('announcementSection');
            const recommendationSection = document.getElementById('recommendationSection');
            const sidebarExtras = document.getElementById('sidebarExtras');
-           
+
            // 更新界面元素显示状态
            function updateExtrasVisibility() {
-               const hasVisibleExtras = !assistantSection.classList.contains('d-none') || 
-                                        !announcementSection.classList.contains('d-none') || 
+               const hasVisibleExtras = !announcementSection.classList.contains('d-none') ||
                                         !recommendationSection.classList.contains('d-none');
-                                        
+
                if (hasVisibleExtras) {
                    sidebarExtras.classList.remove('d-none');
                } else {
                    sidebarExtras.classList.add('d-none');
                }
            }
-           
-           // 绑定事件
+
+           // 绑定事件 - 看板娘浮动显示（CDN 会创建 #waifu 元素）
            let live2dInitialized = false;
            if (toggleAssistant) {
                toggleAssistant.addEventListener('change', function() {
                    if (this.checked) {
-                       assistantSection.classList.remove('d-none');
                        // 首次开启时才加载 Live2D（避免浪费 CDN 流量）
                        if (!live2dInitialized && typeof initLive2D === 'function') {
                            initLive2D();
                            live2dInitialized = true;
+                       } else {
+                           showLive2D();
                        }
                    } else {
-                       assistantSection.classList.add('d-none');
+                       hideLive2D();
                    }
-                   updateExtrasVisibility();
                });
            }
            
@@ -1125,7 +1102,7 @@
    <!-- 添加的 theme-switcher.js 引用 -->
    <script src="js/theme-switcher.js"></script>
    
-   <!-- Live2D 看板娘 -->
+   <!-- Live2D 看板娘（CDN 会自动创建 #waifu 元素，live2d-styles.css 覆盖定位到右下角） -->
    <script src="js/live2d-manager.js"></script>
 
    <!-- 剩余脚本 -->
