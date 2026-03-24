@@ -297,6 +297,166 @@ class WebCrawler:
         ]
         return random.choice(modern_user_agents)
 
+    def _detect_discourse_url(self, url):
+        """检测URL是否为Discourse论坛帖子"""
+        path = urlparse(url).path
+        # 匹配 /t/slug/ID 或 /t/topic/ID 或 /t/slug/ID/post_num
+        return bool(re.search(r'/t/[^/]+/\d+', path))
+
+    def _fetch_discourse_api(self, url):
+        """通过Discourse JSON API获取帖子内容，返回重建的HTML"""
+        parsed = urlparse(url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        # 提取topic ID
+        match = re.search(r'/t/(?:[^/]+/)?(\d+)', parsed.path)
+        if not match:
+            return None, 0
+        topic_id = match.group(1)
+
+        headers = {
+            'User-Agent': self._get_random_user_agent(),
+            'Accept': 'application/json',
+        }
+        for api_url in [f"{base_url}/t/topic/{topic_id}.json", f"{base_url}/t/{topic_id}.json"]:
+            try:
+                response = self.session.get(api_url, headers=headers, timeout=self.timeout)
+                if response.status_code != 200:
+                    continue
+                data = response.json()
+                title = data.get('title', '无标题')
+                posts = data.get('post_stream', {}).get('posts', [])
+                html_parts = [f'<html><head><title>{title}</title></head><body>', f'<h1>{title}</h1>']
+                for post in posts:
+                    username = post.get('username', '')
+                    created_at = post.get('created_at', '')
+                    post_number = post.get('post_number', '')
+                    cooked = post.get('cooked', '')
+                    html_parts.append(f'<div class="post"><p><strong>#{post_number} {username}</strong> - {created_at}</p>{cooked}</div><hr>')
+                html_parts.append('</body></html>')
+                html_content = '\n'.join(html_parts)
+                logger.info(f"Discourse API成功: {url}, 帖子数: {len(posts)}, 内容长度: {len(html_content)}")
+                return html_content, 200
+            except Exception as e:
+                logger.warning(f"Discourse API尝试失败: {api_url}, 错误: {str(e)}")
+        logger.warning(f"Discourse API全部失败: {url}")
+        return None, 0
+
+    def _extract_text_from_mhtml_bytes(self, mhtml_bytes):
+        """从MHTML字节内容提取纯文字"""
+        import email as _email
+        from html.parser import HTMLParser as _HTMLParser
+
+        class _TextExtractor(_HTMLParser):
+            SKIP_TAGS = {'script', 'style', 'head', 'noscript', 'iframe', 'svg'}
+            BLOCK_TAGS = {'p', 'div', 'section', 'article', 'li', 'h1', 'h2', 'h3',
+                          'h4', 'h5', 'h6', 'blockquote', 'pre', 'tr', 'br', 'hr'}
+
+            def __init__(self):
+                super().__init__()
+                self.result = []
+                self.skip_depth = 0
+
+            def handle_starttag(self, tag, attrs):
+                tag = tag.lower()
+                if tag in self.SKIP_TAGS:
+                    self.skip_depth += 1
+                if not self.skip_depth and tag in self.BLOCK_TAGS:
+                    self.result.append('\n')
+
+            def handle_endtag(self, tag):
+                tag = tag.lower()
+                if tag in self.SKIP_TAGS:
+                    self.skip_depth = max(0, self.skip_depth - 1)
+                if not self.skip_depth and tag in self.BLOCK_TAGS:
+                    self.result.append('\n')
+
+            def handle_data(self, data):
+                if not self.skip_depth:
+                    self.result.append(data)
+
+            def get_text(self):
+                text = ''.join(self.result)
+                lines = [l.strip() for l in text.splitlines()]
+                cleaned, blank = [], 0
+                for line in lines:
+                    if line:
+                        cleaned.append(line)
+                        blank = 0
+                    elif blank < 1:
+                        cleaned.append('')
+                        blank += 1
+                return '\n'.join(cleaned).strip()
+
+        try:
+            msg = _email.message_from_bytes(mhtml_bytes)
+            best_html = ''
+
+            def _process_part(part):
+                nonlocal best_html
+                if part.get_content_type() == 'text/html':
+                    charset = part.get_content_charset() or 'utf-8'
+                    raw = part.get_payload(decode=True) or b''
+                    try:
+                        html = raw.decode(charset, errors='replace')
+                    except LookupError:
+                        html = raw.decode('utf-8', errors='replace')
+                    if len(html) > len(best_html):
+                        best_html = html
+
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if not part.is_multipart():
+                        _process_part(part)
+            else:
+                _process_part(msg)
+
+            if not best_html:
+                return None
+            extractor = _TextExtractor()
+            extractor.feed(best_html)
+            return extractor.get_text()
+        except Exception as e:
+            logger.error(f"MHTML解析失败: {str(e)}")
+            return None
+
+    def _fetch_mhtml_fallback(self, url):
+        """使用Playwright CDP捕获MHTML快照并提取文字（最终降级方案）"""
+        if not self._init_browser():
+            logger.warning(f"MHTML降级: 无法初始化浏览器, URL: {url}")
+            return None, 0
+        try:
+            page = self._browser_context.new_page()
+            page.set_default_timeout(self.timeout * 1000)
+            response = page.goto(url, wait_until='networkidle')
+            if response is None or response.status != 200:
+                page.close()
+                return None, (response.status if response else 0)
+            page.wait_for_load_state('domcontentloaded')
+            time.sleep(2)
+            # 通过CDP协议捕获MHTML快照
+            cdp = page.context.new_cdp_session(page)
+            snapshot = cdp.send("Page.captureSnapshot", {"format": "mhtml"})
+            mhtml_data = snapshot.get("data", "")
+            cdp.detach()
+            page.close()
+            if not mhtml_data:
+                logger.warning(f"MHTML降级: CDP快照为空, URL: {url}")
+                return None, 0
+            mhtml_bytes = mhtml_data.encode('utf-8') if isinstance(mhtml_data, str) else mhtml_data
+            text = self._extract_text_from_mhtml_bytes(mhtml_bytes)
+            if text:
+                # 包装成HTML以兼容现有parse_page逻辑
+                escaped = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                paragraphs = '</p><p>'.join(escaped.split('\n'))
+                html = f'<html><body><p>{paragraphs}</p></body></html>'
+                logger.info(f"MHTML降级成功: {url}, 提取文字长度: {len(text)}")
+                return html, 200
+            logger.warning(f"MHTML降级: 未能提取文字, URL: {url}")
+            return None, 0
+        except Exception as e:
+            logger.error(f"MHTML降级失败: {url}, 错误: {str(e)}")
+            return None, 0
+
     def _get_random_delay(self, min_delay=1, max_delay=3):
         """获取随机延迟时间"""
         return random.uniform(min_delay, max_delay)
@@ -311,7 +471,15 @@ class WebCrawler:
             
         # 添加随机延迟防止被封
         time.sleep(self._get_random_delay())
-        
+
+        # 优先尝试Discourse JSON API（无需JS渲染，速度快且稳定）
+        if self._detect_discourse_url(url):
+            logger.info(f"检测到Discourse帖子URL，优先使用JSON API: {url}")
+            discourse_html, discourse_status = self._fetch_discourse_api(url)
+            if discourse_html:
+                return discourse_html, discourse_status
+            logger.warning(f"Discourse JSON API失败，回退到普通爬取: {url}")
+
         try:
             # 使用现代浏览器的请求头
             headers = {
@@ -381,10 +549,28 @@ class WebCrawler:
                         if self.use_browser:
                             browser_content, browser_status = self._download_with_browser(url)
                             if browser_content:
-                                return browser_content, browser_status
-                            logger.warning(f"Playwright 下载失败，返回原始内容: {url}")
+                                html_content = browser_content
+                            else:
+                                logger.warning(f"Playwright 下载失败，尝试MHTML降级: {url}")
+                                mhtml_html, mhtml_status = self._fetch_mhtml_fallback(url)
+                                if mhtml_html:
+                                    return mhtml_html, mhtml_status
                         else:
-                            logger.warning(f"检测到 JS 渲染页面但未启用浏览器模式，返回原始内容: {url}")
+                            logger.warning(f"检测到 JS 渲染页面但未启用浏览器模式，尝试MHTML降级: {url}")
+                            mhtml_html, mhtml_status = self._fetch_mhtml_fallback(url)
+                            if mhtml_html:
+                                return mhtml_html, mhtml_status
+
+                    # 空包检测：HTML体积大但文字内容极少，说明是JS渲染导致的空壳
+                    if len(html_content) > 10000:
+                        from bs4 import BeautifulSoup as _BSCheck
+                        _text_check = _BSCheck(html_content, 'html.parser').get_text(strip=True)
+                        if len(_text_check) < 300:
+                            logger.warning(f"空包检测触发：HTML {len(html_content)} 字节但文字仅 {len(_text_check)} 字符，尝试MHTML降级: {url}")
+                            mhtml_html, mhtml_status = self._fetch_mhtml_fallback(url)
+                            if mhtml_html:
+                                return mhtml_html, mhtml_status
+                            logger.warning(f"MHTML降级也未能获取内容，返回原始内容: {url}")
 
                     return html_content, status_code
 

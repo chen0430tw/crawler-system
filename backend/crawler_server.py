@@ -251,22 +251,27 @@ def run_crawler_task(task_id, config):
                     }
                     urban_legend_result = urban_legend_analyzer.analyze_content(clean_content, url, metadata)
                 
-                # 构造内容对象
+                # 构造内容对象（仅保留text_content，去除原始HTML以减小体积）
                 processed_item = {
                     "url": url,
                     "title": title or "无标题",
-                    "content": clean_content,
                     "text_content": content or processor.extract_text_from_html(clean_content),
-                    "keywords": keywords,
+                    "keywords": keywords or [],
                     "depth": data.get("depth", 0),
                     "format": format_type,
                     "status": status,
-                    "embedded_media": media if media else None
                 }
-                
-                # 添加都市传说分析结果
+                if media:
+                    processed_item["embedded_media"] = media
+
+                # 添加都市传说分析结果（去除冗余字段）
                 if urban_legend_result:
-                    processed_item["urban_legend"] = urban_legend_result
+                    ul = {
+                        "label": urban_legend_result.get("label"),
+                        "details": {k: v for k, v in urban_legend_result.get("details", {}).items()
+                                    if k != "thresholds"},
+                    }
+                    processed_item["urban_legend"] = ul
                 
                 processed_content.append(processed_item)
         
@@ -279,17 +284,20 @@ def run_crawler_task(task_id, config):
         categorized_content = {}
         if processed_content:
             # 提取纯文本用于分类
-            text_contents = [item.get("content", "") for item in processed_content]
-            
+            text_contents = [item.get("text_content", "") for item in processed_content]
+
             # 确定分类数量
             cluster_count = min(5, max(2, len(processed_content) // 3))
-            
+
             # 执行分类
             clusters = processor.classify_content(text_contents, cluster_count)
-            
-            # 整理分类结果
+
+            # 整理分类结果（只存url+title引用，避免重复存储完整内容）
             for cluster_id, indices in clusters.items():
-                category_items = [processed_content[idx] for idx in indices]
+                category_items = [
+                    {"url": processed_content[idx]["url"], "title": processed_content[idx]["title"]}
+                    for idx in indices
+                ]
                 categorized_content[str(cluster_id)] = {
                     "id": cluster_id,
                     "items": category_items
@@ -308,7 +316,7 @@ def run_crawler_task(task_id, config):
         # 计算统计数据
         statistics = calculate_statistics(all_results, processed_content, categorized_content, task_info)
         
-        # 如果启用了都市传说分析，添加相关统计
+        # 如果启用了都市传说分析，添加相关统计（thresholds只存一份）
         if enable_urban_legend and urban_legend_analyzer:
             urban_legend_stats = {
                 "confirmed_count": 0,
@@ -316,7 +324,7 @@ def run_crawler_task(task_id, config):
                 "normal_count": 0,
                 "failed_count": 0
             }
-            
+            # 从第一条有结果的item中提取thresholds，存到统计里
             for item in processed_content:
                 if "urban_legend" in item:
                     label = item["urban_legend"]["label"]
@@ -328,7 +336,14 @@ def run_crawler_task(task_id, config):
                         urban_legend_stats["normal_count"] += 1
                     else:
                         urban_legend_stats["failed_count"] += 1
-            
+                    if "thresholds" not in urban_legend_stats:
+                        raw_details = next(
+                            (i["urban_legend"].get("details", {}) for i in processed_content if "urban_legend" in i),
+                            {}
+                        )
+                        if "thresholds" in raw_details:
+                            urban_legend_stats["thresholds"] = raw_details["thresholds"]
+
             statistics["urban_legend"] = urban_legend_stats
         
         # 构造结果
